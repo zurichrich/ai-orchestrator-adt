@@ -1,0 +1,34 @@
+# Deploy: cd collector && npx wrangler kv namespace create STATS && npx wrangler deploy
+# Free tier. Set the resulting workers.dev URL as TELEMETRY_ENDPOINT in
+# tools/adt_phone_home.py and add its host to docs/security-posture.md — the
+# egress-disclosure test fails if you forget the second half.
+#
+# ADT-224 A2d/A2e — three bindings now, and they are not interchangeable:
+#   STATS      (KV)  install identity only: `install:<uuid>` -> {first_seen}.
+#                    Read first, written once per install, never on a return.
+#   USAGE      (AE)  the adt_usage_v2 dataset: version, os and per-command counts,
+#                    one data point per ping. Does not touch the KV quota.
+#   IP_BUDGET  (DO)  the per-IP daily request + novel-install budgets.
+#
+# The DO class MUST be listed under [[migrations]] as a SQLite-backed class —
+# new_sqlite_classes, not new_classes. A classic Durable Object class is not on
+# the free plan, so the free-tier claim above is only true with that line.
+name = "adt-telemetry"
+main = "worker.js"
+compatibility_date = "2026-09-04"
+
+[[kv_namespaces]]
+binding = "STATS"
+id = "ba5f2326fbe343029362f2c25af925ac"
+
+[[analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "adt_usage_v2"
+
+[[durable_objects.bindings]]
+name = "IP_BUDGET"
+class_name = "IpBudget"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["IpBudget"]

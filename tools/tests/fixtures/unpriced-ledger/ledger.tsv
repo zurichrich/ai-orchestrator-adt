@@ -1,0 +1,4 @@
+2026-09-07T10:00:00Z	ADT-800	100	200	sessA	claude-haiku-4-5-20251001	standard	40000	8000	0	measured	adt-build	inst1
+2026-09-07T10:01:00Z	ADT-800	0	0	sessA	<synthetic>	standard	0	0	0	measured		inst1
+2026-09-07T10:02:00Z	ADT-800	10	20	sessA	claude-opus-5	standard	1000	0	500	measured	adt-build	inst1
+2026-09-07T10:03:00Z	ADT-801	50	60	sessB	claude-imaginary-9	standard	70000	0	0	measured	adt-build	inst1

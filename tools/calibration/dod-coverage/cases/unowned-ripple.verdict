@@ -1,0 +1,9 @@
+### DoD-coverage review
+**Verdict:** GAP
+**Reviewed:** CAL-1 — 6 obligations vs 3 conditions
+**Gaps:**
+- `docs/references.md` hook-catalogue row (Impact 1c / sub-step 1c) — unowned ripple — expected: `must_run: 'grep -q release-guard docs/references.md'` (paired with an absence check for the old name in that file)
+- The rename itself — the hook script file moving from `deploy-guard.sh` to `release-guard.sh` (headline obligation) — no condition — expected: `must_run: 'test -f defaults/hooks/release-guard.sh && ! test -f defaults/hooks/deploy-guard.sh'`. All three current conditions pass with the script still named `deploy-guard.sh` if the callers merely gain the new string.
+- "every reference to it" (Design) — no condition asserts the old name is gone — expected: a repo-wide absence check. Each `grep -q release-guard` is satisfied by a file that names *both* hooks, so a half-done rename that leaves stale `deploy-guard` wiring grades green.
+**Checked and found covered:** 1a settings fragment and 1b uninstall tuple each have a direct grep and are not always-green; the Test plan's `test_uninstall.sh` is wired as a qa-lane `must_run`.
+**Notes:** 1a has no behavioural backstop — nothing executes the settings fragment to prove the renamed hook actually fires.

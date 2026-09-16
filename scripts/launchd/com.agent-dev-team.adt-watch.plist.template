@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.agent-dev-team.adt-watch</string>
+    <!-- OPTIONAL standing persistence agent: every 60s, reconcile the ADT
+         project's cache to GitHub Issues + re-render the kanban (one --once pass
+         per tick, so a hung pass is replaced next interval). No secrets — gh +
+         local files only. Run as a USER agent so the gh keychain resolves.
+
+         This is a TEMPLATE. launchd can't expand ~ or $HOME, so the absolute
+         paths must be substituted before install. From the ADT checkout:
+
+           sed -e "s|__ADT_DIR__|$PWD|g" -e "s|__HOME__|$HOME|g" \
+             scripts/launchd/com.agent-dev-team.adt-watch.plist.template \
+             > ~/Library/LaunchAgents/com.agent-dev-team.adt-watch.plist
+           launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.agent-dev-team.adt-watch.plist
+           launchctl list com.agent-dev-team.adt-watch   # PID + LastExitStatus 0 == healthy
+
+         (Rename the Label per project if you run more than one.)
+    -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__ADT_DIR__/scripts/adt-watch-once.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>60</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>__ADT_DIR__</string>
+    <key>StandardOutPath</key>
+    <string>__ADT_DIR__/logs/adt-watch.log</string>
+    <key>StandardErrorPath</key>
+    <string>__ADT_DIR__/logs/adt-watch.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/sbin:/usr/sbin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+</dict>
+</plist>

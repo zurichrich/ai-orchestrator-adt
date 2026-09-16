@@ -1,0 +1,1229 @@
+{
+ "arms": {
+  "arm-A": {
+   "max_min": 2.9,
+   "mean_min": 2.3,
+   "min_min": 1.8,
+   "runs": 3,
+   "stop_points": [
+    2,
+    3,
+    4
+   ]
+  },
+  "arm-B": {
+   "max_min": 11.4,
+   "mean_min": 9.5,
+   "min_min": 7.1,
+   "runs": 3,
+   "stop_points": [
+    2,
+    3
+   ]
+  },
+  "arm-C": {
+   "max_min": 16.1,
+   "mean_min": 14.5,
+   "min_min": 12.7,
+   "runs": 3,
+   "stop_points": [
+    5,
+    7,
+    9
+   ]
+  }
+ },
+ "captured": "2026-09-10",
+ "commands": {
+  "arms": "docs/gate-tax-runs/live-runs.json (ADT-205, wall-clock is exact)",
+  "dispatches": "same ledger, rows whose command column is subagent:<name>, grouped into contiguous runs per ticket",
+  "gate_effects": "gate_effects: frontmatter scraped from ~/.adt/agent-dev-team/cache/*/done/*.md",
+  "gate_wait": "same ledger, main-session gaps that contain subagent rows for the same ticket; reviewer names normalised across the adt- rename",
+  "waits": "python3 capture.py \u2014 gaps between consecutive main-session rows in .adt/state/cost-ledger.log, attributed to the command bound at the later turn"
+ },
+ "dispatches": {
+  "adt-critical-path-reviewer": [
+   {
+    "span_s": 32,
+    "ticket": "ADT-273",
+    "turns": 2
+   },
+   {
+    "span_s": 193,
+    "ticket": "ADT-273",
+    "turns": 6
+   },
+   {
+    "span_s": 174,
+    "ticket": "ADT-273",
+    "turns": 7
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 267,
+    "ticket": "ADT-273",
+    "turns": 8
+   },
+   {
+    "span_s": 405,
+    "ticket": "ADT-273",
+    "turns": 13
+   },
+   {
+    "span_s": 208,
+    "ticket": "ADT-273",
+    "turns": 8
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 238,
+    "ticket": "ADT-273",
+    "turns": 8
+   },
+   {
+    "span_s": 192,
+    "ticket": "ADT-273",
+    "turns": 7
+   },
+   {
+    "span_s": 27,
+    "ticket": "ADT-273",
+    "turns": 2
+   }
+  ],
+  "adt-design-reviewer": [
+   {
+    "span_s": 169,
+    "ticket": "ADT-263",
+    "turns": 5
+   },
+   {
+    "span_s": 230,
+    "ticket": "ADT-284",
+    "turns": 7
+   }
+  ],
+  "adt-dod-coverage-reviewer": [
+   {
+    "span_s": 0,
+    "ticket": "ADT-224",
+    "turns": 1
+   },
+   {
+    "span_s": 135,
+    "ticket": "ADT-252",
+    "turns": 4
+   },
+   {
+    "span_s": 56,
+    "ticket": "ADT-252",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-252",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 18,
+    "ticket": "ADT-252",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-252",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-252",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 19,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 31,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 56,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 62,
+    "ticket": "ADT-254",
+    "turns": 3
+   },
+   {
+    "span_s": 137,
+    "ticket": "ADT-260",
+    "turns": 4
+   },
+   {
+    "span_s": 155,
+    "ticket": "ADT-260",
+    "turns": 5
+   },
+   {
+    "span_s": 254,
+    "ticket": "ADT-260",
+    "turns": 7
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 31,
+    "ticket": "ADT-264",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 5,
+    "ticket": "ADT-264",
+    "turns": 2
+   },
+   {
+    "span_s": 63,
+    "ticket": "ADT-264",
+    "turns": 3
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 3,
+    "ticket": "ADT-264",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 22,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 154,
+    "ticket": "ADT-264",
+    "turns": 5
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 10,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 124,
+    "ticket": "ADT-263",
+    "turns": 3
+   },
+   {
+    "span_s": 166,
+    "ticket": "ADT-263",
+    "turns": 5
+   },
+   {
+    "span_s": 222,
+    "ticket": "ADT-263",
+    "turns": 6
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 177,
+    "ticket": "ADT-263",
+    "turns": 5
+   },
+   {
+    "span_s": 136,
+    "ticket": "ADT-273",
+    "turns": 3
+   },
+   {
+    "span_s": 63,
+    "ticket": "ADT-263",
+    "turns": 3
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 97,
+    "ticket": "ADT-273",
+    "turns": 3
+   },
+   {
+    "span_s": 145,
+    "ticket": "ADT-263",
+    "turns": 5
+   },
+   {
+    "span_s": 117,
+    "ticket": "ADT-277",
+    "turns": 4
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-284",
+    "turns": 1
+   },
+   {
+    "span_s": 115,
+    "ticket": "ADT-284",
+    "turns": 4
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-284",
+    "turns": 1
+   },
+   {
+    "span_s": 429,
+    "ticket": "ADT-284",
+    "turns": 12
+   },
+   {
+    "span_s": 204,
+    "ticket": "ADT-284",
+    "turns": 5
+   },
+   {
+    "span_s": 153,
+    "ticket": "ADT-284",
+    "turns": 5
+   },
+   {
+    "span_s": 77,
+    "ticket": "ADT-247",
+    "turns": 4
+   },
+   {
+    "span_s": 147,
+    "ticket": "ADT-247",
+    "turns": 4
+   },
+   {
+    "span_s": 143,
+    "ticket": "ADT-247",
+    "turns": 4
+   },
+   {
+    "span_s": 122,
+    "ticket": "ADT-247",
+    "turns": 4
+   },
+   {
+    "span_s": 253,
+    "ticket": "ADT-247",
+    "turns": 7
+   },
+   {
+    "span_s": 146,
+    "ticket": "ADT-301",
+    "turns": 4
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 5,
+    "ticket": "ADT-301",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 150,
+    "ticket": "ADT-301",
+    "turns": 6
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-1",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-306",
+    "turns": 1
+   },
+   {
+    "span_s": 38,
+    "ticket": "ADT-306",
+    "turns": 4
+   },
+   {
+    "span_s": 82,
+    "ticket": "ADT-306",
+    "turns": 3
+   },
+   {
+    "span_s": 89,
+    "ticket": "ADT-334",
+    "turns": 4
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-334",
+    "turns": 1
+   },
+   {
+    "span_s": 5,
+    "ticket": "ADT-334",
+    "turns": 2
+   },
+   {
+    "span_s": 65,
+    "ticket": "ADT-339",
+    "turns": 4
+   },
+   {
+    "span_s": 123,
+    "ticket": "ADT-339",
+    "turns": 3
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-339",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-339",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-339",
+    "turns": 1
+   }
+  ],
+  "adt-plan-quality-reviewer": [
+   {
+    "span_s": 0,
+    "ticket": "ADT-224",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-252",
+    "turns": 1
+   },
+   {
+    "span_s": 12,
+    "ticket": "ADT-252",
+    "turns": 2
+   },
+   {
+    "span_s": 11,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 1,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 12,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-254",
+    "turns": 1
+   },
+   {
+    "span_s": 16,
+    "ticket": "ADT-254",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 39,
+    "ticket": "ADT-264",
+    "turns": 3
+   },
+   {
+    "span_s": 10,
+    "ticket": "ADT-264",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-264",
+    "turns": 1
+   },
+   {
+    "span_s": 61,
+    "ticket": "ADT-264",
+    "turns": 3
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 14,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 70,
+    "ticket": "ADT-263",
+    "turns": 4
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 28,
+    "ticket": "ADT-263",
+    "turns": 3
+   },
+   {
+    "span_s": 131,
+    "ticket": "ADT-263",
+    "turns": 4
+   },
+   {
+    "span_s": 61,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 73,
+    "ticket": "ADT-263",
+    "turns": 3
+   },
+   {
+    "span_s": 63,
+    "ticket": "ADT-263",
+    "turns": 4
+   },
+   {
+    "span_s": 127,
+    "ticket": "ADT-273",
+    "turns": 4
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-273",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 4,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 63,
+    "ticket": "ADT-277",
+    "turns": 2
+   },
+   {
+    "span_s": 117,
+    "ticket": "ADT-277",
+    "turns": 5
+   },
+   {
+    "span_s": 190,
+    "ticket": "ADT-284",
+    "turns": 4
+   },
+   {
+    "span_s": 17,
+    "ticket": "ADT-284",
+    "turns": 2
+   },
+   {
+    "span_s": 88,
+    "ticket": "ADT-284",
+    "turns": 3
+   },
+   {
+    "span_s": 108,
+    "ticket": "ADT-247",
+    "turns": 4
+   },
+   {
+    "span_s": 104,
+    "ticket": "ADT-247",
+    "turns": 4
+   },
+   {
+    "span_s": 6,
+    "ticket": "ADT-247",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 179,
+    "ticket": "ADT-301",
+    "turns": 5
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 2,
+    "ticket": "ADT-301",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-1",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-336",
+    "turns": 1
+   },
+   {
+    "span_s": 26,
+    "ticket": "ADT-336",
+    "turns": 2
+   },
+   {
+    "span_s": 62,
+    "ticket": "ADT-339",
+    "turns": 3
+   },
+   {
+    "span_s": 5,
+    "ticket": "ADT-339",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-339",
+    "turns": 1
+   },
+   {
+    "span_s": 41,
+    "ticket": "ADT-339",
+    "turns": 3
+   }
+  ],
+  "adt-security-reviewer": [
+   {
+    "span_s": 0,
+    "ticket": "ADT-224",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-263",
+    "turns": 1
+   },
+   {
+    "span_s": 15,
+    "ticket": "ADT-263",
+    "turns": 2
+   },
+   {
+    "span_s": 271,
+    "ticket": "ADT-247",
+    "turns": 9
+   },
+   {
+    "span_s": 353,
+    "ticket": "ADT-247",
+    "turns": 12
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-301",
+    "turns": 1
+   },
+   {
+    "span_s": 31,
+    "ticket": "ADT-301",
+    "turns": 2
+   },
+   {
+    "span_s": 30,
+    "ticket": "ADT-301",
+    "turns": 2
+   },
+   {
+    "span_s": 0,
+    "ticket": "ADT-1",
+    "turns": 1
+   }
+  ],
+  "general-purpose": [
+   {
+    "span_s": 0,
+    "ticket": "ADT-224",
+    "turns": 2
+   },
+   {
+    "span_s": 8,
+    "ticket": "ADT-277",
+    "turns": 9
+   },
+   {
+    "span_s": 22,
+    "ticket": "ADT-277",
+    "turns": 10
+   },
+   {
+    "span_s": 85,
+    "ticket": "ADT-277",
+    "turns": 30
+   },
+   {
+    "span_s": 22,
+    "ticket": "ADT-277",
+    "turns": 9
+   },
+   {
+    "span_s": 17,
+    "ticket": "ADT-277",
+    "turns": 8
+   },
+   {
+    "span_s": 22,
+    "ticket": "ADT-277",
+    "turns": 6
+   },
+   {
+    "span_s": 11,
+    "ticket": "ADT-277",
+    "turns": 3
+   },
+   {
+    "span_s": 75,
+    "ticket": "ADT-277",
+    "turns": 4
+   },
+   {
+    "span_s": 436,
+    "ticket": "ADT-299",
+    "turns": 13
+   },
+   {
+    "span_s": 442,
+    "ticket": "ADT-306",
+    "turns": 14
+   },
+   {
+    "span_s": 672,
+    "ticket": "ADT-306",
+    "turns": 22
+   },
+   {
+    "span_s": 478,
+    "ticket": "ADT-306",
+    "turns": 16
+   },
+   {
+    "span_s": 231,
+    "ticket": "ADT-306",
+    "turns": 7
+   }
+  ]
+ },
+ "gap_cap_s": 900,
+ "gate_effects": {
+  "ADT-224": {
+   "caused_edit": true,
+   "records": 8
+  },
+  "ADT-247": {
+   "caused_edit": false,
+   "records": 4
+  },
+  "ADT-252": {
+   "caused_edit": true,
+   "records": 5
+  },
+  "ADT-254": {
+   "caused_edit": true,
+   "records": 6
+  },
+  "ADT-260": {
+   "caused_edit": false,
+   "records": 1
+  },
+  "ADT-263": {
+   "caused_edit": false,
+   "records": 6
+  },
+  "ADT-264": {
+   "caused_edit": true,
+   "records": 4
+  },
+  "ADT-273": {
+   "caused_edit": false,
+   "records": 4
+  },
+  "ADT-277": {
+   "caused_edit": false,
+   "records": 2
+  },
+  "ADT-284": {
+   "caused_edit": true,
+   "records": 7
+  },
+  "ADT-301": {
+   "caused_edit": false,
+   "records": 4
+  },
+  "ADT-306": {
+   "caused_edit": false,
+   "records": 1
+  },
+  "ADT-334": {
+   "caused_edit": true,
+   "records": 2
+  },
+  "ADT-336": {
+   "caused_edit": false,
+   "records": 1
+  },
+  "ADT-339": {
+   "caused_edit": true,
+   "records": 2
+  }
+ },
+ "gate_wait": {
+  "by_agent": {
+   "adt-critical-path-reviewer": {
+    "gaps": 4,
+    "wait_s": 1247
+   },
+   "adt-design-reviewer": {
+    "gaps": 1,
+    "wait_s": 436
+   },
+   "adt-dod-coverage-reviewer": {
+    "gaps": 32,
+    "wait_s": 6781
+   },
+   "adt-plan-quality-reviewer": {
+    "gaps": 13,
+    "wait_s": 2807
+   },
+   "adt-security-reviewer": {
+    "gaps": 3,
+    "wait_s": 754
+   },
+   "general-purpose": {
+    "gaps": 4,
+    "wait_s": 2136
+   }
+  },
+  "gate_gaps": 57,
+  "gate_s": 14161,
+  "other_gaps": 172,
+  "other_s": 40214
+ },
+ "waits": {
+  "ADT-224": {
+   "adt-close": {
+    "capped_s": 654,
+    "gaps": 2,
+    "longest_gap_s": 372,
+    "raw_s": 654
+   }
+  },
+  "ADT-247": {
+   "adt-plan": {
+    "capped_s": 2483,
+    "gaps": 15,
+    "longest_gap_s": 490,
+    "raw_s": 4020
+   }
+  },
+  "ADT-252": {
+   "adt-brief": {
+    "capped_s": 2141,
+    "gaps": 11,
+    "longest_gap_s": 801,
+    "raw_s": 3591
+   }
+  },
+  "ADT-254": {
+   "adt-brief": {
+    "capped_s": 2656,
+    "gaps": 13,
+    "longest_gap_s": 545,
+    "raw_s": 6071
+   }
+  },
+  "ADT-260": {
+   "adt-plan": {
+    "capped_s": 3305,
+    "gaps": 18,
+    "longest_gap_s": 731,
+    "raw_s": 4490
+   }
+  },
+  "ADT-263": {
+   "adt-brief": {
+    "capped_s": 1704,
+    "gaps": 8,
+    "longest_gap_s": 372,
+    "raw_s": 1704
+   },
+   "adt-build": {
+    "capped_s": 1872,
+    "gaps": 15,
+    "longest_gap_s": 474,
+    "raw_s": 1872
+   },
+   "adt-telemetry": {
+    "capped_s": 730,
+    "gaps": 4,
+    "longest_gap_s": 345,
+    "raw_s": 730
+   }
+  },
+  "ADT-264": {
+   "adt-brief": {
+    "capped_s": 579,
+    "gaps": 4,
+    "longest_gap_s": 251,
+    "raw_s": 579
+   }
+  },
+  "ADT-273": {
+   "adt-brief": {
+    "capped_s": 3287,
+    "gaps": 12,
+    "longest_gap_s": 543,
+    "raw_s": 3287
+   }
+  },
+  "ADT-277": {
+   "adt-brief": {
+    "capped_s": 856,
+    "gaps": 5,
+    "longest_gap_s": 438,
+    "raw_s": 856
+   }
+  },
+  "ADT-280": {
+   "adt-brief": {
+    "capped_s": 1352,
+    "gaps": 7,
+    "longest_gap_s": 523,
+    "raw_s": 39615
+   }
+  },
+  "ADT-284": {
+   "adt-plan": {
+    "capped_s": 10108,
+    "gaps": 46,
+    "longest_gap_s": 762,
+    "raw_s": 14869
+   }
+  },
+  "ADT-299": {
+   "adt-brief": {
+    "capped_s": 2631,
+    "gaps": 5,
+    "longest_gap_s": 802,
+    "raw_s": 2631
+   }
+  },
+  "ADT-301": {
+   "adt-brief": {
+    "capped_s": 8032,
+    "gaps": 31,
+    "longest_gap_s": 896,
+    "raw_s": 11861
+   }
+  },
+  "ADT-306": {
+   "adt-plan": {
+    "capped_s": 4588,
+    "gaps": 18,
+    "longest_gap_s": 771,
+    "raw_s": 9286
+   }
+  },
+  "ADT-315": {
+   "adt-brief": {
+    "capped_s": 391,
+    "gaps": 3,
+    "longest_gap_s": 163,
+    "raw_s": 391
+   }
+  },
+  "ADT-331": {
+   "adt-brief": {
+    "capped_s": 1147,
+    "gaps": 6,
+    "longest_gap_s": 399,
+    "raw_s": 4506
+   }
+  },
+  "ADT-334": {
+   "adt-brief": {
+    "capped_s": 5253,
+    "gaps": 25,
+    "longest_gap_s": 706,
+    "raw_s": 13969
+   }
+  },
+  "ADT-336": {
+   "adt-plan": {
+    "capped_s": 113,
+    "gaps": 1,
+    "longest_gap_s": 113,
+    "raw_s": 113
+   }
+  },
+  "ADT-339": {
+   "adt-brief": {
+    "capped_s": 493,
+    "gaps": 1,
+    "longest_gap_s": 493,
+    "raw_s": 493
+   }
+  }
+ }
+}

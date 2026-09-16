@@ -1,0 +1,36 @@
+.DS_Store
+logs/
+*.log
+.env
+
+# Per-machine ADT config written by setup.sh --init-github (project_number,
+# repo, cache path). No secrets, but machine/owner-specific — never committed.
+.adt/
+
+# Per-user project configs. adt-install.sh writes these to ~/.adt/projects/, but
+# guard the in-repo dir too: only the example template is ever committed, so a
+# stray local config (absolute paths / addresses) can't leak into git.
+projects/*.yaml
+!projects/example.yaml
+
+# python
+__pycache__/
+*.pyc
+
+# ADT-301 removed the old top-level working-folder ignore: that folder is gone.
+# Machine-local state lives under `.adt/` (ignored, in the managed block below);
+# decisions.md and retros/ live under docs/ and are COMMITTED on purpose - they
+# are the project's own knowledge and must survive an uninstall.
+# Wrangler local tool cache — contains the account id and the account
+# holder name (an email). Never commit it. Added after it leaked into a
+# commit on ADT-170 and the audit missed it (case-sensitivity bug, fixed).
+.wrangler/
+
+# ADT:gitignore:start
+# Managed by ADT (ADT-174). Machine-local + generated paths. Do not
+# edit by hand - install rewrites this block; uninstall removes it.
+.adt/
+# ADT:gitignore:end
+
+# pytest coverage artifact (ADT-236) - never committed.
+.coverage

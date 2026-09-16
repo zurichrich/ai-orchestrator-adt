@@ -1,0 +1,22 @@
+# Generated output — never 3-way-merge it (multi-agent-git-workflow rule §D1).
+#
+# `.claude/` is 42 files written by `lib/install-defaults.sh` from `commands/`,
+# `defaults/` and `tools/`. It is committed (the harness loads it) AND generated,
+# so it conflicts on every overlap even when the source does not — and it cannot
+# be partitioned between sessions, because a change to any playbook rewrites it.
+# In one afternoon ADT-264 rebased four times, every collision in this tree and
+# none in the source it is generated from (#265, #267, #268, #270, #271).
+#
+# `merge=ours` stops git reconciling these paths. Whoever merges second keeps
+# their tree and REGENERATES it: `bash lib/resync.sh`, which is authoritative
+# because the source is. Use resync rather than calling install-defaults.sh
+# in place directly: it is the same regeneration, and it also names the
+# playbooks whose installed copy changed, so you know which commands a session
+# already running has loaded a stale copy of (ADT-306). `tests/test_installed_copies_match_source.sh`
+# is what proves the regeneration actually happened.
+#
+# The driver is registered per-clone and is NOT carried by this file:
+#     git config merge.ours.driver true
+# Scoped to exactly the generated globs, never authored source (§D1).
+.claude/**                 merge=ours
+.claude/.adt-manifest.json merge=ours

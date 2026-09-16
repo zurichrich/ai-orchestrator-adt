@@ -1,0 +1,10 @@
+### DoD-coverage review
+**Verdict:** GAP
+**Reviewed:** CAL-4 — 5 obligations vs 1 condition
+**Gaps:**
+- Pull path: `reconcile_all()` also lists every Issue with its full body every 60s — missing symmetric half — expected: a pull-path condition asserting a converged board makes no full-body list call
+- Headline goal "stop the rate limit being drained" — headline obligation — expected: a condition measuring total API calls per tick, not just the push half; with the pull path untouched the push test goes green while the limit still drains
+- Sub-step 1b "persist the board index" — presence, not behaviour — expected: a condition asserting the index survives a restart
+- `test_push_incremental.py` carries no `was_red_at` — always-green condition
+**Checked and found covered:** sub-step 1a (behaviour, not presence); the Test plan line; runnability of the condition.
+**Notes:** The spec's own Design names the pull path as part of the same pass and the same drain, then scopes both sub-steps and the only test to the push half — the uncovered direction is stated in the spec, not inferred.

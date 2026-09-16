@@ -1,0 +1,12 @@
+### DoD-coverage review
+**Verdict:** GAP
+**Reviewed:** CAL-3 — 6 obligations vs 1 condition
+**Gaps:**
+- Headline goal: the done-move is DENIED when the checkout is behind — headline obligation — expected: a `must_run` staging a behind checkout and asserting a deny, with `was_red_at`.
+- Design mechanism: compare HEAD against origin/main — presence, not behaviour — expected: a condition exercising both the allow and deny verdicts.
+- Sub-step 1a — always-green — `bash -n` parses the file whether or not 1a was written; it would have passed before the work started.
+- Sub-step 1b: fail open when no watcher installed — unowned ripple / missing symmetric half — expected: a no-watcher fixture asserting exit 0 and the warning. Fail-open is the half that silently disables the feature if wrong.
+- Risk: the remote-tracking ref must be refreshed before it is read — unowned risk mitigation — expected: a stale-ref fixture asserting the gate still denies. This is the exact known failure mode, and the spec itself flags it.
+- Test plan is "verified manually against the live watcher" — manual verification standing in for a check — the only evidence is unrepeatable, host-specific, and asserts only the negative case; it never exercised the deny path the ticket exists to create.
+**Checked and found covered:** None. Neither `bash -n` as wiring coverage nor the manual prod-host run holds up.
+**Notes:** The single condition is `lane: build` — no condition fires at the done-move lane the gate actually guards.

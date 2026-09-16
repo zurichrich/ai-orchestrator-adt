@@ -1,0 +1,3 @@
+# GitHub usernames of contributors who have accepted CLA.md.
+# One per line. Add yours in the same PR as your first contribution.
+zurichrich

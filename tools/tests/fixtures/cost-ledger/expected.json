@@ -1,0 +1,13 @@
+{
+  "_comment": [
+    "Hand-computed at Opus list rates. ADT-900 spans TWO models and BOTH speeds,",
+    "and includes a 5m-TTL cache write, which never occurs in live local traffic",
+    "(100% of observed writes are 1h) — only a fixture can exercise it.",
+    "opus-5 standard: 1050*5 + 2500*25 + 750000*0.5 + 100000*10 = 1442750",
+    "opus-4-8 fast:    100*10 + 200*50 + 10000*1.0 + 4000*12.5  =   71000",
+    "input+output only (what the pre-ADT-115 ledger recorded)    =   78750"
+  ],
+  "ADT_900_micros": 1513750,
+  "ADT_900_in_out_only_micros": 78750,
+  "price_table_version": "2026-08-20"
+}

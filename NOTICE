@@ -1,0 +1,11 @@
+ai-orchestrator-adt (ADT)
+Copyright 2026 zurichrich
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full terms, and LICENSING.md for what that
+means in practice.
+
+ADT bundles no third-party code. The Python engine under tools/ is stdlib
+only; the hooks are POSIX shell; the playbooks, rules and skills are prose.
+It depends at runtime on git and the GitHub CLI (gh), which it invokes as
+external programs and does not redistribute.

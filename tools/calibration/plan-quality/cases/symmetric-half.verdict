@@ -1,0 +1,11 @@
+### Plan-quality review
+**Verdict:** FLAWED
+**Reviewed:** CALP-5 — rate-limits the cache->Issues push half of the sync tick (token bucket + header backoff + spend log), and leaves the rest of the tick alone.
+
+**Defects:**
+- Bounds only the push path (`cache -> Issues`), with the rationale "the runaway was observed on the push path" — the Problem says the *watcher* must not be able to exhaust the quota again, and the same tick also runs a pull path — **one direction of a symmetric mechanism** — expected: the bound sits on the tick's total API spend (or is applied to both halves), so pull is covered by construction rather than by the accident of which side was observed failing. Verified in the repo the plan targets: `tools/adt_sync.py:1198` calls `pull_all(cfg)` inside the same tick, and `pull_all` issues `_list_issues_rest(...)` every tick plus a periodic unfiltered full sweep (`tools/adt_sync.py:1026-1042`) — unbounded by anything in this Design. This is the ADT-101 shape verbatim: push fixed, pull unaudited, recurrence weeks later.
+- Caps writes *per tick* — the Problem is exhaustion "in one session", i.e. across many ticks — **a check that cannot fail (in the dimension that matters)** — expected: the plan should either state why per-tick x tick-frequency is a sufficient session bound, or carry a cumulative/session budget. As written, N ticks each spending its full bucket reproduces the reported failure without ever tripping the cap.
+
+**Checked and found sound:** (1) the token-bucket + remaining-quota-header backoff is the simple mechanism, not an over-built one — no simpler alternative is obviously passed over on the push side; (2) it does not re-implement an existing limiter — `adt_sync.py` has `RateLimitError` handling but no spend cap, so "new" is accurate; (3) the verification story is unit tests, not "verified manually", and both stated conditions have a real path to failing.
+
+**Notes:** The push/pull asymmetry is the load-bearing defect; the per-tick-vs-per-session gap would remain even if pull were included. Whether the DoD names these is `dod-coverage-reviewer`'s question, not mine.

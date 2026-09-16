@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "current": "0.2.0",
+  "revoked": [],
+  "notes": "Version advisory for ADT installs. Published as a release asset and fetched by tools/adt_watch.py at a version-pinned URL. `revoked` lists versions an install should stop running; the client warns loudly and fails open on any fetch, parse or schema error."
+}

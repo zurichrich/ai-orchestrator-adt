@@ -1,0 +1,106 @@
+{
+  "_comment": "ADT default hooks. setup.sh MERGES this into a project's .claude/settings.json (does not clobber existing keys). Paths use ${CLAUDE_PROJECT_DIR}. Wires 11 hooks across 5 events: done-guard + deferral-guard + test-run-guard + destructive-git-guard + worktree-guard (PreToolUse), adt-close-complete + phrase-linter + adt-token-log + adt-terminal-title (Stop), usage-log + adt-terminal-title (UserPromptSubmit), adt-terminal-title (SessionStart), adt-subagent-cost (SubagentStop). adt-subagent-cost bills a subagent's tokens to the dispatching ticket (ADT-224): without it the ledger sums the main transcript only, and understated ADT-205 by 76% because seven playbooks dispatch subagents. deferral-guard denies an unauthorised `gh issue create`, or a gh api call that creates an Issue (ADT-114 enforced rule 2 \u2014 no casual deferral). test-run-guard denies an unauthorised FULL-suite run \u2014 minutes of the human's time to re-derive a result already on record; working-style #7 says a check is triggered by a change, not by a resume. Targeted runs are never gated. destructive-git-guard denies a git command that would destroy uncommitted work (reset --hard, checkout/restore of a dirty path, clean -f) and says to commit or stash first (ADT-359). worktree-guard denies a Write/Edit in the canonical checkout to a path listed in `worktree_guard_paths:` (set in ~/.adt/projects/<name>.yaml, copied by install into .adt/config.yaml); with no value it does nothing (multi-agent-git-workflow.md \u00a7A.3). usage-log latches the active ticket per session; adt-token-log bills each turn's token usage to it \u2014 both halves of the token counter must be wired or the ledger is never written (ADT-052). (The auto-regen PostToolUse hook was retired in the cache-first migration \u2014 adt watch renders the board now, there is no in-repo backlog write to regen on.) deploy-guard is shipped as a TEMPLATE in defaults/hooks/ but NOT auto-wired here \u2014 it's project-specific; a project copies + fills it in and wires it in its own settings.json. See defaults/README.md for the full hook reference. adt-terminal-title (SessionStart/UserPromptSubmit/Stop) writes the terminal tab title as \"<TICKET> \u00b7 <topic>\"; the env block disables Claude Code's own title writer so the two don't fight. adt-install.sh sets terminal.integrated.tabs.title to ${sequence} for VS Code and Cursor (ADT-334).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-done-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-deferral-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-test-run-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-destructive-git-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-worktree-guard.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-close-complete.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-phrase-linter.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-token-log.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-terminal-title.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-usage-log.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-terminal-title.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-terminal-title.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/adt-subagent-cost.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+  }
+}

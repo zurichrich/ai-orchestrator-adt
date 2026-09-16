@@ -1,0 +1,8 @@
+### DoD-coverage review
+**Verdict:** GAP
+**Reviewed:** CAL-5 — 3 obligations vs 1 condition
+**Gaps:**
+- Sub-step 1a / test plan — "Token attribution" section in repo-root `README.md` — un-runnable condition — expected: `must_run: 'grep -q "Token attribution" README.md'`. The sole condition uses `file: README.md`, which the grader resolves under `.adt/README.md`. `README.md` is a repo SOURCE file and no rendered copy exists, so the grader fail-opens silently and never grades. The condition looks checkable and checks nothing.
+- Headline goal — no effective condition — with the only condition inert, every obligation including the stated purpose has zero enforcement. The DoD passes green on an untouched repo.
+**Checked and found covered:** presence-not-behaviour (a `grep -q` for a heading is the right form for a docs ticket); unowned ripple (one file, no callers); missing symmetric half (no pair exists).
+**Notes:** Single-condition DoD, and that condition is inert — this ticket would grade done with the README untouched.

@@ -1,0 +1,98 @@
+{
+  "adjacent-problem": {
+    "expect": "FLAWED",
+    "failure_class": "solves an adjacent problem",
+    "source": "ADT-114 close / ADT-126 brief \u2014 five mechanisms shipped, the PO's design-correctness question untouched",
+    "must_mention": [
+      "simplest"
+    ],
+    "held_out": false
+  },
+  "agent-writable-gate": {
+    "expect": "FLAWED",
+    "failure_class": "a gate keyed on state the graded party can write",
+    "source": "docs/self-verification.md \u2014 the deferral guard's first draft keyed on the session ticket binding",
+    "must_mention": [
+      "marker"
+    ],
+    "held_out": false
+  },
+  "uncalibrated-judge": {
+    "expect": "FLAWED",
+    "failure_class": "a check that cannot fail",
+    "source": "tools/calibration/dod-coverage/README.md \u2014 an uncalibrated judge makes a gate worse than no gate",
+    "must_mention": [
+      "calibrat"
+    ],
+    "held_out": false
+  },
+  "single-writer": {
+    "expect": "FLAWED",
+    "failure_class": "single-writer assumption",
+    "source": "ADT-116 \u2014 brief-then-file raced adt watch and minted duplicate tickets",
+    "must_mention": [
+      "watch"
+    ],
+    "held_out": false
+  },
+  "symmetric-half": {
+    "expect": "FLAWED",
+    "failure_class": "one direction of a symmetric mechanism",
+    "source": "shipped defect, 2026-07-05 \u2014 push hardened, pull repeated it",
+    "must_mention": [
+      "pull"
+    ],
+    "held_out": false
+  },
+  "over-scoped-metric": {
+    "expect": "FLAWED",
+    "failure_class": "over-scoped metric or mechanism",
+    "source": "ADT-126's own first draft \u2014 full ticket-replay pass^k as one bullet of three",
+    "must_mention": [
+      "harness"
+    ],
+    "held_out": false
+  },
+  "clean-simple": {
+    "expect": "SOUND",
+    "failure_class": null,
+    "source": "false-positive control \u2014 ADT-119's log rotation: the simplest thing, nothing forced more",
+    "must_mention": [],
+    "held_out": false
+  },
+  "clean-with-constraint": {
+    "expect": "SOUND",
+    "failure_class": null,
+    "source": "false-positive control \u2014 complexity that NAMES the constraint forcing it (ADT-109 quota pools)",
+    "must_mention": [],
+    "held_out": false
+  },
+  "held-teardown-symmetry": {
+    "expect": "FLAWED",
+    "failure_class": "one direction of a symmetric mechanism",
+    "source": "HELD OUT \u2014 ADT-071/072: close moved the ticket but never removed the branch/worktree the build created. This instance is NOT cited in the reviewer prompt.",
+    "must_mention": [
+      "worktree"
+    ],
+    "held_out": true
+  },
+  "held-unverified-runtime": {
+    "expect": "FLAWED",
+    "failure_class": "verification story is manual / unverified runtime assumption",
+    "source": "HELD OUT \u2014 ADT-054: the marker keyed on $CLAUDE_SESSION_ID, which is unset; the mechanism was a silent no-op for weeks. NOT cited in the reviewer prompt.",
+    "must_mention": [
+      "CLAUDE_SESSION_ID"
+    ],
+    "held_out": true,
+    "anomaly": "Caught on DIFFERENT grounds than the class this case was built for. The reviewer returned FLAWED citing 'solves an adjacent problem' and 're-implements what exists', both verified against real files, and EXPLICITLY DECLINED to score the unverified $CLAUDE_SESSION_ID assumption, citing the build playbook's rule that runtime assumptions are build-time risks, not plan blockers. That reasoning is defensible and the citation is real. The must_mention token therefore matched a sentence DISCLAIMING the intended defect, so the mechanical 'caught' here is partly luck. Recorded rather than rescored: changing an expectation after seeing a verdict is the goalpost-moving the declared bar exists to prevent."
+  },
+  "held-silent-failopen": {
+    "expect": "FLAWED",
+    "failure_class": "a check that cannot fail",
+    "source": "HELD OUT \u2014 ADT-090: a `file:` condition resolves under .adt/, so one pointed at a source path silently fail-opens and never grades. NOT cited in the reviewer prompt.",
+    "must_mention": [
+      "file:"
+    ],
+    "held_out": true
+  }
+}

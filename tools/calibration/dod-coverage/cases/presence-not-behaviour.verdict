@@ -1,0 +1,12 @@
+### DoD-coverage review
+**Verdict:** GAP
+**Reviewed:** CAL-2 — 8 obligations vs 2 conditions
+**Gaps:**
+- Headline goal: follow-on counts are actually produced — headline obligation / presence-not-behaviour — expected: a `must_run` executing the reporter against a fixture backlog and asserting a known count in stdout
+- Design: walks the closed backlog — presence, not behaviour — expected: a run over a fixture with N closed tickets asserting N per-ticket lines
+- Design/1b: reads each ticket's `follow_ons:` and prints the count — presence, not behaviour — expected: fixture with a known length, assert the printed count matches
+- Sub-step 1b: a ticket with no `follow_ons:` key treated as 0 — presence, not behaviour — expected: a run over a fixture lacking the key, exit 0, asserting `0`
+- Sub-step 1c: prints the mean — presence, not behaviour — expected: fixture with known counts, assert the printed mean
+- No consumer/ripple condition — unowned ripple — nothing asserts the reporter is reachable
+**Checked and found covered:** Sub-step 1a (`test -f` genuinely grades it, red before the work); no import-time syntax error; neither condition is always-green.
+**Notes:** Both conditions together prove only "a file exists and imports" — an empty file with a docstring passes both. Minor: the import condition's relative `sys.path.insert(0,"tools")` is cwd-fragile.

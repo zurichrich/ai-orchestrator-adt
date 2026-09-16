@@ -1,0 +1,195 @@
+{
+  "schema": 2,
+  "bundle_version": "0.1.0",
+  "source_commit": "fd4544d8b7e793adffa4a52f7880b3d808a52303",
+  "files": [
+    {
+      "path": "agents/adt-critical-path-reviewer.md",
+      "sha256": "ae9ad609757240ec867595fac00e0d3a4a58644afb757ad8fdf0822c3d988f9f"
+    },
+    {
+      "path": "agents/adt-design-reviewer.md",
+      "sha256": "387dd259569dacf97b9a0a09d7eab07c3908cd23d9ac9a368179dccecd224429"
+    },
+    {
+      "path": "agents/adt-dod-coverage-reviewer.md",
+      "sha256": "256dd0bda522a4dcdbaecf25ea2b294cba3092f3cee970500b56543890ae70df"
+    },
+    {
+      "path": "agents/adt-forensic-investigator.md",
+      "sha256": "688a3b16cbafe706149a3be8567977a63a0cc6c5009ad0077f3c696e3b36192f"
+    },
+    {
+      "path": "agents/adt-plan-quality-reviewer.md",
+      "sha256": "594f5c3eb6f676b699ae8591206d3143f49d929af7c1f9c9035071e586bb5773"
+    },
+    {
+      "path": "agents/adt-security-reviewer.md",
+      "sha256": "778fbfa00adbc9dffbe27cca300c56f696eb224d5931415f605610f53e98dfef"
+    },
+    {
+      "path": "commands/adt-block.md",
+      "sha256": "97992229ba223eb8b6d69f1065537cc1e0698bf488a9ae8c5088c15f2d5808e9"
+    },
+    {
+      "path": "commands/adt-brief.md",
+      "sha256": "d5e5d289f5b86c87b93b1fc41558f63302b911426b07f5c3a853298f97b24806"
+    },
+    {
+      "path": "commands/adt-build-todone.md",
+      "sha256": "9054c6dc49bcbe5116c21b73b1d48daa902eb337c002f85baae6a2bfa03aa549"
+    },
+    {
+      "path": "commands/adt-build.md",
+      "sha256": "637ea2bc987e405d4eeaefdf6da88f8a4c984020aa82f6fb7f712aefb8dbc4b1"
+    },
+    {
+      "path": "commands/adt-close.md",
+      "sha256": "58fed4eb22681adc6aa80c7e30628730c1d6c997a7c4d197c9c20fb74fb11d61"
+    },
+    {
+      "path": "commands/adt-decide.md",
+      "sha256": "cecd7ec51099ced6c6941e0d219c5c7c151032611b5024bad4a9eb358bfcb3f3"
+    },
+    {
+      "path": "commands/adt-plan-fasttrack.md",
+      "sha256": "bea3d0f904d7f4e04937edfa4b99205573518efa6fdf25ab9bb3f221aa15c35a"
+    },
+    {
+      "path": "commands/adt-plan.md",
+      "sha256": "7cee3a7d4cb276173e074992c4e053e2f5e5876d353b2df98985d31dc5a9b7bf"
+    },
+    {
+      "path": "commands/adt-qa-run.md",
+      "sha256": "f72120e261a87b8ede591f8da9439176cfd95a70b4b7edb323e3e6126922bc7f"
+    },
+    {
+      "path": "commands/adt-release-check.md",
+      "sha256": "028135bc29a3830f1b74e292f5118927c966ac67b94e4e8070174d50f737c02c"
+    },
+    {
+      "path": "commands/adt-review-critical-path.md",
+      "sha256": "4aea85bf4a98b7e9c0634250022cd2ca31bff3ca70fb8f7170fa9a0dbe97a4f7"
+    },
+    {
+      "path": "commands/adt-review-designer.md",
+      "sha256": "f15bdc8e2d4eafcae18f7b3c6c4be24f2aab90cf13ff21eb30e4825b29570a6d"
+    },
+    {
+      "path": "commands/adt-review-security.md",
+      "sha256": "9acc73d409a3341e806b1463cd8a53eac922b2006e692ad25a4ddb8222ea495d"
+    },
+    {
+      "path": "commands/adt-unblock.md",
+      "sha256": "1fd6be653b54db529aa465fb3e3897a9a6b9c4b9e82bef4caa862bcde8f72293"
+    },
+    {
+      "path": "hooks/adt-close-complete.sh",
+      "sha256": "f6316c47c5bcdf9fb964bb61b95a07e3a0a91198abb388907c88d018982311d5"
+    },
+    {
+      "path": "hooks/adt-deferral-guard.sh",
+      "sha256": "134adc0b82f2403108b3296ae6ba007b0ad0b3fa0254a2aff04d38a37695f985"
+    },
+    {
+      "path": "hooks/adt-deploy-guard.sh",
+      "sha256": "2bfd413535d3491d4ed9ca66c8052961e80aef05a0c66c1854e8b44a1d8a11ba"
+    },
+    {
+      "path": "hooks/adt-destructive-git-guard.sh",
+      "sha256": "d4ec167e30b13df051d823225bf961505d071dadb09b3eae5d9c529856d64cb4"
+    },
+    {
+      "path": "hooks/adt-dod.sh",
+      "sha256": "ce35492356b1fa11e16bf46ef6e03677ada2d2922ea96288b69bce93a37ee1d5"
+    },
+    {
+      "path": "hooks/adt-done-guard.sh",
+      "sha256": "1a57e983e8c5e5ad4815987fa70db73ff26fd94163c224649bb8e5fb39459cf9"
+    },
+    {
+      "path": "hooks/adt-mark-tix.sh",
+      "sha256": "eb88e28d38657f304e2bb69cd1024e12708a69d139d6690e570d7862be2a2037"
+    },
+    {
+      "path": "hooks/adt-phrase-linter.sh",
+      "sha256": "19c4d063d9f348c7eab14622f48904025abbbd685fd4012ca79ed7b85bbaca8d"
+    },
+    {
+      "path": "hooks/adt-reattribute.sh",
+      "sha256": "d85fa8933ec8122e12ecf3bde137481d9fa9d5d28aade373e5b4422e952565d2"
+    },
+    {
+      "path": "hooks/adt-subagent-cost.sh",
+      "sha256": "187379048722d6a915e74c4a62397ffe2f94b2d5eaa5b2d852df57702a87585c"
+    },
+    {
+      "path": "hooks/adt-terminal-title.sh",
+      "sha256": "00d32c805a626e364d6226cd60bb24eb186c9c5b4a204c7e344839ac128feb35"
+    },
+    {
+      "path": "hooks/adt-test-run-guard.sh",
+      "sha256": "88aeda7a57cc9e3e64deb4b9798b4975ca22fbbc27122b1b0ac14dfcf4085c28"
+    },
+    {
+      "path": "hooks/adt-token-log.sh",
+      "sha256": "3a19fc3bdf15faeeae02c0a0bddc3f03b7e755102828f97cdaebd4f2c290c410"
+    },
+    {
+      "path": "hooks/adt-token-sum.sh",
+      "sha256": "51264b5cb59d3263b0f91f2b7fdba9e532e4ace211a37d4c8fcbc56d7b9b3263"
+    },
+    {
+      "path": "hooks/adt-token-total.sh",
+      "sha256": "83c622237e1b474f552f2fe1bf5450e83f24f81c66404a0a4baaf5293408bc13"
+    },
+    {
+      "path": "hooks/adt-usage-log.sh",
+      "sha256": "a700f89155d0b22a461e73a83384996b357651f32a30065de74c3cde23b5227e"
+    },
+    {
+      "path": "hooks/adt-verify-bind.sh",
+      "sha256": "29023f16d9054ab8b9d316f11974080f3ddcf6e2cecb652f958852e2c15911c9"
+    },
+    {
+      "path": "hooks/adt-worktree-guard.sh",
+      "sha256": "e44de6a87c6f75f4b28ec25995ab1e3656e3682c2764332e20ff73c639923e81"
+    },
+    {
+      "path": "rules/multi-agent-git-workflow.md",
+      "sha256": "d61a83358340bbe23431d3c3bc5e537582420c33e58a86c6310e826218a0d7b6"
+    },
+    {
+      "path": "rules/working-style.md",
+      "sha256": "b1f76229fa7dcfd2454244616386bdbbbe512bda1aeab5247f6967eb7936e62b"
+    },
+    {
+      "path": "skills/adt-diagnose/SKILL.md",
+      "sha256": "26d9f86009847c48e7e030c29c4db9c4490f7f9030e1facc314ccb55ecce2819"
+    },
+    {
+      "path": "tools/adt_backfill_cost.py",
+      "sha256": "4f2967e4f54760c3d8260493d2b17c93e0062b872f73482ea73d9b8be3046a48"
+    },
+    {
+      "path": "tools/adt_cost.py",
+      "sha256": "3861dd9555bfe65df40505c7dafa613e288f693f63d1fdba52715422e654b847"
+    },
+    {
+      "path": "tools/adt_dod.py",
+      "sha256": "9b1e7e9173a2a903b738a43f32ae14f9eb45f2ff3a1c4a517a2d0dec811df6de"
+    },
+    {
+      "path": "tools/plan-quality-calibration.md",
+      "sha256": "622e1e90fcb99c9d2a6ce2fbdb9cd3257841fa03f28d493d5ae46e648fe08998"
+    },
+    {
+      "path": "tools/pricing.json",
+      "sha256": "54b51b751800c429255c39ee7276655d88253280007668997cd575ddb0b0894d"
+    },
+    {
+      "path": "tools/ticket_serializer.py",
+      "sha256": "87b3e4616dabd2fc28b0ec993c550b981d57b63be6fffcc68ccab43baf608658"
+    }
+  ]
+}

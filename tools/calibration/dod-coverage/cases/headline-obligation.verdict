@@ -1,0 +1,11 @@
+### DoD-coverage review
+**Verdict:** GAP
+**Reviewed:** CAL-6 — 8 obligations vs 2 conditions
+**Gaps:**
+- Headline goal: "the gate must DENY the move when that evidence fails" — the headline obligation — expected: an end-to-end condition running a real `git mv` of a ticket whose evidence fails through the hook and asserting the move is blocked. The two unit tests exercise the matcher and the parser — the PARTS — and would both go green with the deny path never wired to anything.
+- Sub-step 1c "return the deny decision" — unowned sub-step — expected: a test asserting the hook emits a PreToolUse deny decision in the shape the harness honours.
+- Design mechanism "grades the ticket's declared evidence" — unowned mechanism / presence-not-behaviour — expected: a run over a fixture with one passing and one failing condition. Parsing evidence is not grading it; nothing covers the step between parse and deny.
+- Hook registration as a PreToolUse matcher — applied but not deployed — expected: a condition asserting the hook is registered with a matcher that fires. Both current conditions pass on an unregistered script.
+- The allow direction — missing symmetric half — expected: a condition asserting a done-move whose evidence HOLDS is permitted. A hook that denies unconditionally satisfies every condition listed.
+**Checked and found covered:** 1a (matcher) and 1b (evidence parse) are covered by their tests; the Test plan line is covered exactly, and it is the only spec line the DoD mirrors.
+**Notes:** The DoD stops at exactly the scope of the Test plan section and never reaches the Problem & goal sentence.

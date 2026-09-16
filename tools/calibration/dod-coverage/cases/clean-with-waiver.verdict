@@ -1,0 +1,7 @@
+### DoD-coverage review
+**Verdict:** COVERED
+**Reviewed:** CAL-8 — 6 obligations vs 2 conditions
+**Gaps:**
+- none
+**Checked and found covered:** (1) the headline behaviour is asserted by `test_claim_pairing.sh` with `was_red_at: HEAD`, so it is genuinely new-behaviour, and sub-steps 1a/1b land inside it; (2) the `defaults/README.md` ripple is owned by the `grep -q` condition — presence-not-behaviour, but the obligation IS documentation, so a presence grep is the right shape; (3) the UI-surfacing obligation is a recorded carve-out with its reason, marked WAIVED — a discharged obligation, not a silent omission, and not offered as though it were a passing condition.
+**Notes:** The doc grep carries no `was_red_at` — a weak point, not a coverage gap. Warn-only is a design constraint, not an obligation needing its own condition.

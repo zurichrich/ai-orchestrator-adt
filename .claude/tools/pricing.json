@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "ADT price table (ADT-115). Anthropic list rates, USD per million tokens.",
+    "Cache rates are NOT stored: they are DERIVED from base input via the",
+    "multipliers below, exactly as the pricing docs define them. Storing five",
+    "numbers per model would be five chances to get one wrong.",
+    "Keyed by model AND speed: fast mode rebases the whole table, and the",
+    "caching multipliers stack on top of fast-mode pricing.",
+    "Bump `version` on any rate change — a stamped cost records which version",
+    "priced it, so a correction is auditable instead of silently rewriting",
+    "history. Source: platform.claude.com/docs/en/about-claude/pricing"
+  ],
+  "version": "2026-08-20",
+  "multipliers": {
+    "cache_read": 0.1,
+    "cache_write_5m": 1.25,
+    "cache_write_1h": 2.0
+  },
+  "models": {
+    "claude-fable-5":   {"standard": {"input": 10.0, "output": 50.0}},
+    "claude-mythos-5":  {"standard": {"input": 10.0, "output": 50.0}},
+    "claude-opus-5":    {"standard": {"input": 5.0, "output": 25.0},
+                         "fast":     {"input": 10.0, "output": 50.0}},
+    "claude-opus-4-8":  {"standard": {"input": 5.0, "output": 25.0},
+                         "fast":     {"input": 10.0, "output": 50.0}},
+    "claude-opus-4-7":  {"standard": {"input": 5.0, "output": 25.0}},
+    "claude-opus-4-6":  {"standard": {"input": 5.0, "output": 25.0}},
+    "claude-opus-4-5":  {"standard": {"input": 5.0, "output": 25.0}},
+    "claude-sonnet-5":  {"standard": {"input": 2.0, "output": 10.0}},
+    "claude-sonnet-4-6":{"standard": {"input": 3.0, "output": 15.0}},
+    "claude-sonnet-4-5":{"standard": {"input": 3.0, "output": 15.0}},
+    "claude-haiku-4-5": {"standard": {"input": 1.0, "output": 5.0}}
+  }
+}

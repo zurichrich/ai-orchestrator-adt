@@ -1,0 +1,7 @@
+### DoD-coverage review
+**Verdict:** COVERED
+**Reviewed:** CAL-7 — 5 obligations vs 1 condition
+**Gaps:**
+- none
+**Checked and found covered:** (1) the headline obligation — the single `must_run` executes a test whose assertion is exactly the spec's behaviour, so it asserts the stated purpose rather than mere presence; (2) always-green — `was_red_at: HEAD` is present, so the condition could not have passed before the work; (3) unowned ripple — the Impact section states "none beyond the core change" AND names the verification, which is a discharged obligation, not a gap.
+**Notes:** The `__version__` constant has no condition of its own but is not separately observable — the "prints a semver" assertion cannot pass without it, so it is covered behaviourally.

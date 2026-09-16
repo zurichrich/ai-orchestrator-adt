@@ -1,0 +1,50 @@
+{
+  "unowned-ripple": {
+    "expect": "GAP",
+    "gap_class": "unowned ripple",
+    "source": "shipped defect, 2026-06-30 — spec-driven, and finish the ripple",
+    "must_mention": ["docs/references.md"]
+  },
+  "presence-not-behaviour": {
+    "expect": "GAP",
+    "gap_class": "presence, not behaviour",
+    "source": "ADT-114 plan review, 2026-08-20",
+    "must_mention": ["test -f"]
+  },
+  "manual-verification": {
+    "expect": "GAP",
+    "gap_class": "manual verification standing in for a check",
+    "source": "shipped defect, 2026-06-29 — verified manually is not tested",
+    "must_mention": ["manual"]
+  },
+  "missing-symmetric-half": {
+    "expect": "GAP",
+    "gap_class": "missing symmetric half",
+    "source": "shipped defect, 2026-07-05 — audit both sides of a runaway",
+    "must_mention": ["pull"]
+  },
+  "unrunnable-condition": {
+    "expect": "GAP",
+    "gap_class": "un-runnable condition",
+    "source": "shipped defect, 2026-07-05 — DoD authoring: dry-run the conditions",
+    "must_mention": ["README.md"]
+  },
+  "headline-obligation": {
+    "expect": "GAP",
+    "gap_class": "the headline obligation",
+    "source": "ADT-114 brief, mechanism 1",
+    "must_mention": []
+  },
+  "clean-small": {
+    "expect": "COVERED",
+    "gap_class": null,
+    "source": "false-positive control",
+    "must_mention": []
+  },
+  "clean-with-waiver": {
+    "expect": "COVERED",
+    "gap_class": null,
+    "source": "false-positive control — a RECORDED carve-out is not a gap",
+    "must_mention": []
+  }
+}
