@@ -501,7 +501,7 @@ fi
 
 # ── Emit the manifest (ADT-94) — the install receipt: {path, sha256} per file ──
 /usr/bin/python3 - "$CLAUDE/.adt-manifest.json" "$ADT_DIR" <<'PY' "${MANIFEST_LINES[@]:-}"
-import json, os, sys, subprocess
+import json, os, re, sys, subprocess
 out_path, adt_dir = sys.argv[1], sys.argv[2]
 files = []
 for line in sys.argv[3:]:
@@ -514,6 +514,16 @@ try:
         ["git", "-C", adt_dir, "rev-parse", "HEAD"], text=True).strip()
 except Exception:
     commit = None
+# ADT was republished from a fresh history once (AO-2), so a pinned commit can
+# belong to a lineage a later clone does not share. Recording the origin makes
+# that case distinguishable from "this clone is simply behind".
+try:
+    source_repo = subprocess.check_output(
+        ["git", "-C", adt_dir, "remote", "get-url", "origin"], text=True).strip()
+    source_repo = re.sub(r"^.*github\.com[:/]", "", source_repo)
+    source_repo = re.sub(r"\.git$", "", source_repo) or None  # matches _adt_layer_origin_id
+except Exception:
+    source_repo = None
 # ADT-170 A10: bundle_version makes an install's version legible to support
 # ("which bundle are you running") and to the staleness calculation. Distinct
 # from source_commit, which names a commit; this names a release.
@@ -523,7 +533,7 @@ try:
 except Exception:
     bundle_version = None
 manifest = {"schema": 2, "bundle_version": bundle_version,
-            "source_commit": commit,
+            "source_commit": commit, "source_repo": source_repo,
             "files": sorted(files, key=lambda e: e["path"])}
 json.dump(manifest, open(out_path, "w"), indent=2)
 open(out_path, "a").write("\n")

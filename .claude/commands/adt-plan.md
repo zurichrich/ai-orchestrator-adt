@@ -549,4 +549,4 @@ You are choosing between two valid technical approaches with different
 long-term implications, or choosing not to follow a pattern the codebase
 usually uses.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

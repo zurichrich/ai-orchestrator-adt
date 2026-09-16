@@ -87,4 +87,4 @@ gh api -X PUT repos/{owner}/{repo}/pulls/{N}/merge -f merge_method=merge
 On a repo whose `main` is pinned by consumers, use a **merge commit**, never a
 squash. Squashing orphans the SHAs the consumers pin.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

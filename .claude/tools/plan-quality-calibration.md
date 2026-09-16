@@ -53,4 +53,4 @@ is still recorded in the ticket, and only the automatic refusal is
 withheld. The correct response is to leave it disabled — never to
 re-run the calibration until it looks good.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

@@ -199,4 +199,4 @@ tickets whose hash is unchanged and writes nothing. A data-loss bug was once
 filed from a correctly quoted dry-run line for this reason. Citing the command
 is not enough on its own: also cite the code path.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

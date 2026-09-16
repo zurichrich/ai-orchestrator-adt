@@ -242,4 +242,4 @@ returned the same PASS and the same findings in minutes instead of an hour.
 Tests fail in a way that points to a problem with the environment rather than the
 code, or the plan and the code differ in a way that needs the user's judgement.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

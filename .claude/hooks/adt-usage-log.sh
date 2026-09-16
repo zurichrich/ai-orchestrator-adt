@@ -128,4 +128,4 @@ printf '%s\t%s\n' "$(date -u +%FT%TZ)" "$cmd" >> "$state/usage.log" 2>/dev/null 
 
 exit 0
 
-# adt-bundle: v0.1.0
+# adt-bundle: v0.2.0

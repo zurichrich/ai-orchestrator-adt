@@ -105,6 +105,61 @@ else
   bad "older clone: rc=$rc, clean=$(clean "$TMP/at_b" && echo y || echo n), out: $out"
 fi
 
+echo "[test] unknown-lineage: a pinned commit from another repo goes to the branch"
+# ADT was republished from a fresh history (AO-2): every consumer's committed
+# manifest pins a commit this clone cannot resolve, and no pull ever will. With
+# source_repo naming a different repository, that is a lineage change, not a
+# possible downgrade, so it takes the reviewed-branch path.
+mkproj lineage; commit_layer lineage "$A"
+# the scratch ADT clone has no remote; give it a local one so "which repo is
+# this a clone of" has an answer, as it does for a real clone.
+git init -q --bare "$TMP/adt-origin.git" 2>/dev/null || true
+git -C "$ADT" remote get-url origin >/dev/null 2>&1 \
+  || git -C "$ADT" remote add origin "$TMP/adt-origin.git"
+adt_at "$B"   # a clone whose layer differs, so there is something to write
+/usr/bin/python3 - "$TMP/lineage" <<'PYEOF'
+import json, subprocess, sys
+p = sys.argv[1]
+m = json.load(open(p + "/.claude/.adt-manifest.json"))
+m["source_commit"] = "0" * 40          # a commit no clone has
+m["source_repo"] = "someone/old-repo"  # from a repository this clone is not
+json.dump(m, open(p + "/.claude/.adt-manifest.json", "w"), indent=2)
+subprocess.run(["git", "-C", p, "add", ".claude/.adt-manifest.json"], check=True)
+subprocess.run(["git", "-C", p, "commit", "-qm", "pin a foreign lineage"], check=True)
+subprocess.run(["git", "-C", p, "push", "-q", "origin", "main"], check=True)
+PYEOF
+out="$(bash "$ADT/lib/adt-layer.sh" apply "$ADT" "$TMP/lineage" main 2>&1)"; rc=$?
+branch="$(git -C "$TMP/lineage" for-each-ref --format='%(refname:short)' 'refs/heads/chore/adt-upgrade-*' | head -1)"
+if [[ $rc -eq 0 && -n "$branch" ]] && clean "$TMP/lineage"; then
+  ok "a layer pinned to another repository's history writes the upgrade branch instead of refusing"
+else
+  bad "unknown-lineage: rc=$rc out: $out"
+fi
+
+echo "[test] unknown commit from the SAME repo still refuses"
+mkproj samerepo; commit_layer samerepo "$A"
+/usr/bin/python3 - "$TMP/samerepo" "$ADT" <<'PYEOF'
+import json, re, subprocess, sys
+p, adt = sys.argv[1], sys.argv[2]
+m = json.load(open(p + "/.claude/.adt-manifest.json"))
+m["source_commit"] = "0" * 40
+m["source_repo"] = subprocess.run(["git", "-C", adt, "remote", "get-url", "origin"],
+                                  capture_output=True, text=True).stdout.strip() or None
+# same normalisation the manifest writer applies
+if m["source_repo"]:
+    m["source_repo"] = re.sub(r"\.git$", "", re.sub(r"^.*github\.com[:/]", "", m["source_repo"]))
+json.dump(m, open(p + "/.claude/.adt-manifest.json", "w"), indent=2)
+subprocess.run(["git", "-C", p, "add", ".claude/.adt-manifest.json"], check=True)
+subprocess.run(["git", "-C", p, "commit", "-qm", "pin an unpushed commit"], check=True)
+subprocess.run(["git", "-C", p, "push", "-q", "origin", "main"], check=True)
+PYEOF
+out="$(bash "$ADT/lib/adt-layer.sh" apply "$ADT" "$TMP/samerepo" main 2>&1)"; rc=$?
+if [[ $rc -eq 3 ]] && clean "$TMP/samerepo"; then
+  ok "an unresolvable commit from the same repository still refuses (the downgrade guard)"
+else
+  bad "same-repo unknown commit: rc=$rc out: $out"
+fi
+
 echo "[test] a newer clone writes a branch, not the working tree"
 mkproj up; commit_layer up "$A"
 git -C "$TMP/up" checkout -q -b work

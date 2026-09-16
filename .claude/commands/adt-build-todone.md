@@ -155,4 +155,4 @@ didn't settle goes to `/adt-block`. Never guess at user-visible behaviour to
 keep the loop running: a wrong autonomous advance is the failure this command
 is designed to prevent.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

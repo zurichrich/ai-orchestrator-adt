@@ -104,4 +104,4 @@ VERDICT: APPROVE | APPROVE-WITH-FIXES | REJECT
 - **REJECT or any HIGH** → the calling role should `/adt-block`.
 - At the **release gate**, also confirm the earlier verdict's fixes are present.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

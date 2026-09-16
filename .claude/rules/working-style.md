@@ -315,4 +315,4 @@ banned phrases (which are fixed strings). Added at the bottom rather than the
 top because renumbering 1-11 would have broken roughly twenty cross-references
 in hooks, tests and docs.*
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

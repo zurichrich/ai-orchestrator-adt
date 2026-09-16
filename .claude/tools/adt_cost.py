@@ -517,4 +517,4 @@ def _cli(argv) -> int:
 if __name__ == "__main__":
     sys.exit(_cli(sys.argv[1:]))
 
-# adt-bundle: v0.1.0
+# adt-bundle: v0.2.0

@@ -46,4 +46,4 @@ abstracting it".
    that stage command makes the commit. Where the decision log is gitignored
    (ADT's own is), there is nothing to stage.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->
