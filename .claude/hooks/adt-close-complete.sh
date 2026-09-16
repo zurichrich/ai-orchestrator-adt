@@ -185,4 +185,4 @@ This fires once per session. Fix it, or say why it should stand.
 EOF
 exit 2
 
-# adt-bundle: v0.1.0
+# adt-bundle: v0.2.0

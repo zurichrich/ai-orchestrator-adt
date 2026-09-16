@@ -61,4 +61,4 @@ VERDICT: BLOCKER | NIT | PASS | ABSTAIN (out-of-scope)
 - **NIT** → caller weighs fix-now vs fix-later.
 - **PASS** / **ABSTAIN** → caller commits normally.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

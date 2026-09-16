@@ -83,4 +83,4 @@ if [ -n "$cmd" ]; then
 fi
 exit 0
 
-# adt-bundle: v0.1.0
+# adt-bundle: v0.2.0

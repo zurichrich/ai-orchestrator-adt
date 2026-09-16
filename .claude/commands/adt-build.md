@@ -264,4 +264,4 @@ A UI/UX choice the plan didn't specify; an external service the project hasn't
 connected; a sub-step whose intent is unclear. Don't guess at behaviour the user
 will see.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

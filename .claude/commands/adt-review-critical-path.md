@@ -30,4 +30,4 @@ the path triggers the gate whatever tier the author chose.
 Each project sets the reviewer's scope and invariants in
 `.claude/agents/adt-critical-path-reviewer.md`.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

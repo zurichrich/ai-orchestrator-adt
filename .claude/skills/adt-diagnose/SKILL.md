@@ -66,4 +66,4 @@ Produce, before any fix is allowed:
 
 If you can't show the value at each step, you are still diagnosing.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

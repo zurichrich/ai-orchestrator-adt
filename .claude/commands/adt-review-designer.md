@@ -27,4 +27,4 @@ step of `/adt-build`).
 4. If you disagree with a finding marked "must fix", use `/adt-block` to ask the
    user.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

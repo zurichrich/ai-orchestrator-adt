@@ -238,4 +238,4 @@ checking. An unbound close is one that hook cannot check.
     old copies until they pull ADT and re-run its installer. There is no
     `adt update` command. State this gap; don't assume it away.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

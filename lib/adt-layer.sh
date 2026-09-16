@@ -55,6 +55,19 @@ _adt_layer_main() {  # <PROJECT_PATH> [main]
   printf '%s\n' "${m:-main}"
 }
 
+# An identity for "which repository is this clone of", for comparing against the
+# manifest's source_repo. Not the github helper below: that one returns empty for
+# any non-github remote, which would silently switch the lineage check off.
+_adt_layer_origin_id() {  # <DIR>
+  # A clone with no origin is normal (the test fixtures, a tarball install), and
+  # its `git remote get-url` exit code would kill a caller running with
+  # `set -euo pipefail` — which is how this first shipped and took out every
+  # install-join test.
+  local url
+  url="$(git -C "$1" remote get-url origin 2>/dev/null || true)"
+  printf '%s' "$url" | sed -E 's#^.*github\.com[:/]##; s#\.git$##'
+}
+
 # owner/name when origin is on github.com, else empty (no compare URL then).
 _adt_layer_github_repo() {  # <PROJECT_PATH>
   git -C "$1" remote get-url origin 2>/dev/null \
@@ -67,6 +80,7 @@ adt_layer_state() {  # <ADT_DIR> <PROJECT_PATH> [main]
   main="$(_adt_layer_main "$p" "${3:-}")"
   ADT_LAYER_MAIN="$main"
   ADT_LAYER_STATE="none"; ADT_LAYER_COMMITTED=""; ADT_LAYER_BUNDLE=""; ADT_LAYER_MANIFEST=""
+  ADT_LAYER_SOURCE_REPO=""; ADT_LAYER_ORIGIN_REPO=""
   ADT_LAYER_HEAD="$(git -C "$adt" rev-parse HEAD 2>/dev/null || true)"
   if [[ "$adt" -ef "$p" ]]; then
     ADT_LAYER_STATE="self"; return 0
@@ -80,11 +94,14 @@ adt_layer_state() {  # <ADT_DIR> <PROJECT_PATH> [main]
   manifest="$(git -C "$p" show "origin/$main:.claude/.adt-manifest.json" 2>/dev/null || true)"
   [[ -n "$manifest" ]] || return 0
   ADT_LAYER_MANIFEST="$manifest"
-  { IFS= read -r ADT_LAYER_COMMITTED || true; IFS= read -r ADT_LAYER_BUNDLE || true; } < <(
+  { IFS= read -r ADT_LAYER_COMMITTED || true; IFS= read -r ADT_LAYER_BUNDLE || true
+    IFS= read -r ADT_LAYER_SOURCE_REPO || true; } < <(
     printf '%s' "$manifest" | /usr/bin/python3 -c 'import json, sys
 m = json.load(sys.stdin)
 print(m.get("source_commit") or "")
-print(m.get("bundle_version") or "")' 2>/dev/null || true)
+print(m.get("bundle_version") or "")
+print(m.get("source_repo") or "")' 2>/dev/null || true)
+  ADT_LAYER_ORIGIN_REPO="$(_adt_layer_origin_id "$adt")"
 
   # A committed manifest with no readable commit cannot be compared. Refusing
   # would leave no remedy, so it goes to the reviewed branch like a divergence.
@@ -102,6 +119,17 @@ print(m.get("bundle_version") or "")' 2>/dev/null || true)
       || _adt_layer_say "could not fetch origin in the ADT clone $adt; comparing against what it already has"
   fi
   if ! git -C "$adt" cat-file -e "$ADT_LAYER_COMMITTED^{commit}" 2>/dev/null; then
+    # The pinned commit is not in this clone even after the fetch above. Two
+    # different situations reach here, and only the repo tells them apart:
+    # the clone is behind a commit that was never pushed (refuse — it may be a
+    # downgrade), or the layer came from a repository that does not share this
+    # history at all, which is what ADT's own republication did to every
+    # consumer (AO-2). A lineage change is permanent, so refusing leaves no
+    # remedy; it goes to the reviewed branch like any other divergence.
+    if [[ -n "$ADT_LAYER_SOURCE_REPO" && -n "$ADT_LAYER_ORIGIN_REPO" \
+          && "$ADT_LAYER_SOURCE_REPO" != "$ADT_LAYER_ORIGIN_REPO" ]]; then
+      ADT_LAYER_STATE="diverged"; return 0
+    fi
     ADT_LAYER_STATE="older"   # cannot prove it is not behind
   elif git -C "$adt" merge-base --is-ancestor "$ADT_LAYER_COMMITTED" HEAD; then
     ADT_LAYER_STATE="newer"
@@ -196,7 +224,7 @@ adt_layer_refuse_older() {  # <ADT_DIR>
     _adt_layer_say "ADT ${ADT_LAYER_BUNDLE:-?} (source ${ADT_LAYER_COMMITTED:0:7}) is committed on origin/$ADT_LAYER_MAIN, and this ADT clone (${ADT_LAYER_HEAD:0:7}) is older. Refusing to downgrade it."
   else
     _adt_layer_say "ADT ${ADT_LAYER_BUNDLE:-?} is committed on origin/$ADT_LAYER_MAIN from commit ${ADT_LAYER_COMMITTED:0:7}, which this ADT clone does not have, so it cannot tell whether it is older. Refusing."
-    _adt_layer_say "if the pull below does not bring that commit, the machine that installed it had ADT commits that were never pushed."
+    _adt_layer_say "if the pull below does not bring that commit, either the machine that installed it had ADT commits that were never pushed, or the layer came from a repository that does not share this history and this manifest predates source_repo (AO-2). In the second case, regenerate the layer from this clone: lib/install-defaults.sh <ADT_DIR> <PROJECT_PATH>, then commit it."
   fi
   _adt_layer_say "update the ADT clone, then run this again:"
   printf '            git -C %s pull\n' "$adt" >&2

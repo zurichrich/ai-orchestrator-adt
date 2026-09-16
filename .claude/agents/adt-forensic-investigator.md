@@ -90,4 +90,4 @@ report, which is why every other ADT reviewer returns one.
 - Don't read everything; start at the event log for the window, then
   follow the thread.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

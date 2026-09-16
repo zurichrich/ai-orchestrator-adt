@@ -69,4 +69,4 @@ Note: this project can't always render live (e.g. Cloudflare blocks automated
 requests) — review the diff/preview statically and flag anything that needs a
 human eyeball at the relevant breakpoint.
 
-<!-- adt-bundle: v0.1.0 -->
+<!-- adt-bundle: v0.2.0 -->

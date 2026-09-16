@@ -99,4 +99,4 @@ mv "$tmp" "$ledger"
 echo
 echo "-> re-keyed to $tix. adt watch will refresh the 🪙 badges on its next pass."
 
-# adt-bundle: v0.1.0
+# adt-bundle: v0.2.0
