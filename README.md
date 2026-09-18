@@ -2,6 +2,13 @@
 
 ## Agent-Dev-Team (ADT)
 
+- 5x your AI Development speed and cut the bugs your AI writes and control your costs.
+- Stop your agents writing the wrong thing and over complicating your requests.
+- Run multiple agents in parallel on the same project without compromising quality.
+- Shrink your development team and lifecycle to the minimum.
+- Give visibility to your Product Owner with access to knowledge stored in the tickets and in the code.
+- Let your agents do the building while you do the thinking.
+
 ADT guides you and your agents through a controlled process that follows
 developer best practices and uses the latest multi-agent AI methods (commands,
 loops, skills, tools), leaving you to add the human value.
