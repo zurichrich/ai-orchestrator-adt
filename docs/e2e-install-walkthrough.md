@@ -39,7 +39,7 @@ undocumented prerequisite).
 ## 1. Clone ADT and create a throwaway project
 
 ```bash
-git clone https://github.com/zurichrich/ai-orchestrator-adt.git ~/agent-dev-team
+git clone https://github.com/zurichrich/ai-orchestrator-adt.git ~/ai-orchestrator-adt
 gh api -X POST /user/repos -f name='adt-walkthrough' -F private=true -F auto_init=true
 git clone https://github.com/$(gh api user --jq .login)/adt-walkthrough ~/adt-walkthrough
 ```
@@ -50,7 +50,7 @@ git clone https://github.com/$(gh api user --jq .login)/adt-walkthrough ~/adt-wa
 
 ```bash
 cd ~/adt-walkthrough
-~/agent-dev-team/adt-install.sh
+~/ai-orchestrator-adt/adt-install.sh
 ```
 
 The installer interviews you for what it cannot infer, then prints its plan
@@ -74,7 +74,7 @@ before doing anything. Expect, in order:
 an error, not a silent default:
 
 ```bash
-~/agent-dev-team/adt-install.sh </dev/null   # → "No answer for 'Project name' (stdin closed)."
+~/ai-orchestrator-adt/adt-install.sh </dev/null   # → "No answer for 'Project name' (stdin closed)."
 ```
 
 Pass `--yes` when you genuinely want every default; the run is then labelled as
@@ -115,7 +115,7 @@ Then watch the ticket move. Each lane change is a file move in the cache plus a
 column:
 
 ```bash
-python3 ~/agent-dev-team/tools/adt_sync.py --root ~/adt-walkthrough
+python3 ~/ai-orchestrator-adt/tools/adt_sync.py --root ~/adt-walkthrough
 gh api "repos/$(gh api user --jq .login)/adt-walkthrough/issues/1" --jq '[.labels[].name]'
 ```
 
@@ -134,8 +134,8 @@ the run-3 walkthrough record in the private archive, divergence 1.
 ## 4. Update — re-run the installer
 
 ```bash
-cd ~/agent-dev-team && git pull
-cd ~/adt-walkthrough && ~/agent-dev-team/adt-install.sh
+cd ~/ai-orchestrator-adt && git pull
+cd ~/adt-walkthrough && ~/ai-orchestrator-adt/adt-install.sh
 ```
 
 There is no separate update command; the installer **is** the update path, and
@@ -145,7 +145,7 @@ removes files ADT no longer ships — and **keeps any copy you edited**:
 
 ```bash
 echo "<!-- my note -->" >> .claude/commands/adt-block.md
-~/agent-dev-team/adt-install.sh --yes
+~/ai-orchestrator-adt/adt-install.sh --yes
 grep -c "my note" .claude/commands/adt-block.md    # 1 — your edit survived
 ```
 
@@ -160,7 +160,7 @@ ls ~/.adt/projects/                                # every configured project
 git -C ~/your-other-project status --porcelain     # must be unchanged
 ```
 
-A bare `~/agent-dev-team/setup.sh` (no `--project`) is the machine-wide
+A bare `~/ai-orchestrator-adt/setup.sh` (no `--project`) is the machine-wide
 reconciler — use it deliberately after a `git pull` of ADT when you *do* want
 every project refreshed.
 
@@ -170,7 +170,7 @@ every project refreshed.
 
 ```bash
 cd ~/adt-walkthrough
-~/agent-dev-team/adt-install.sh --uninstall
+~/ai-orchestrator-adt/adt-install.sh --uninstall
 ```
 
 It removes what the manifest records and nothing else: the `.claude/` ADT
@@ -195,7 +195,7 @@ git status --porcelain
 
 ```bash
 rm -rf ~/.adt/adt-walkthrough/cache     # prove the cache rebuilds from Issues
-cd ~/adt-walkthrough && ~/agent-dev-team/adt-install.sh
+cd ~/adt-walkthrough && ~/ai-orchestrator-adt/adt-install.sh
 ```
 
 Run this one **from a terminal**: step 5 backed the project config up to
@@ -218,7 +218,7 @@ create` and the cache file being written from reconstructing a duplicate stub
 (ADT-116). Wait it out, or run the pull again:
 
 ```bash
-python3 ~/agent-dev-team/tools/adt_sync.py --root ~/adt-walkthrough --pull
+python3 ~/ai-orchestrator-adt/tools/adt_sync.py --root ~/adt-walkthrough --pull
 ```
 
 ---
@@ -226,7 +226,7 @@ python3 ~/agent-dev-team/tools/adt_sync.py --root ~/adt-walkthrough --pull
 ## 7. Tear down
 
 ```bash
-cd ~/adt-walkthrough && ~/agent-dev-team/adt-install.sh --uninstall
+cd ~/adt-walkthrough && ~/ai-orchestrator-adt/adt-install.sh --uninstall
 rm -rf ~/adt-walkthrough ~/.adt/adt-walkthrough ~/.adt/projects/adt-walkthrough.yaml*
 ```
 

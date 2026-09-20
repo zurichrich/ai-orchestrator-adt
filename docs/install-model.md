@@ -92,8 +92,8 @@ cleanly; the first re-install converts them to the copy+manifest model.
 
 ## Clean separation — no project→source linkage
 After install, a project is **self-contained**: `find <project>/.claude -type l`
-finds no ADT symlink, and no copied file points back into `~/agent-dev-team`. The
-copied hooks (`adt-done-guard.sh`, `adt-dod.sh`) reach the copied grader by a plain
+finds no ADT symlink, and no copied file points back into
+`~/ai-orchestrator-adt`. The copied hooks (`adt-done-guard.sh`, `adt-dod.sh`) reach the copied grader by a plain
 local path (`../tools/adt_dod.py`) — no symlink-walk, no `$ADT_DIR`. The accepted
 trade: an edit in the ADT repo does **not** auto-appear in a project; you re-run
 the installer to pull it. That is the point — a snapshot you own, not a live tie.
