@@ -9,7 +9,7 @@
 # full setup: defaults → GitHub board + labels → adopt existing issues → render.
 #
 #   cd ~/your-project
-#   /path/to/agent-dev-team/adt-install.sh
+#   /path/to/ai-orchestrator-adt/adt-install.sh
 #
 # Idempotent: safe to re-run. Re-running re-confirms inferred values and
 # re-syncs. It writes the ADT defaults into the working tree only while no

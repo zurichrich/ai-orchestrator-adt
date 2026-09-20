@@ -40,11 +40,22 @@ done
 
 echo "[test] every ADT script the walkthrough names exists"
 missing=0
+n_paths=0
 while IFS= read -r rel; do
-  [[ -e "$ADT_DIR/$rel" ]] || { fail "walkthrough names ~/agent-dev-team/$rel — not in this repo"; missing=1; }
-done < <(grep -oE '~/agent-dev-team/[A-Za-z0-9_./-]+' "$DOC" \
-          | sed 's|~/agent-dev-team/||' | sort -u)
-[[ $missing -eq 0 ]] && pass "all named ADT scripts exist"
+  n_paths=$((n_paths+1))
+  [[ -e "$ADT_DIR/$rel" ]] || { fail "walkthrough names ~/ai-orchestrator-adt/$rel — not in this repo"; missing=1; }
+done < <(grep -oE '~/ai-orchestrator-adt/[A-Za-z0-9_./-]+' "$DOC" \
+          | sed 's|~/ai-orchestrator-adt/||' | sort -u)
+# The extraction above is keyed to the documented clone path. Rename that path
+# and it matches nothing: the loop body never runs, `missing` stays 0, and this
+# test prints PASS while checking nothing at all. A zero count is that failure,
+# not a clean run — so it fails here, and the pass line carries the count so a
+# dead check cannot read as a live one (AO-005).
+if [[ $n_paths -eq 0 ]]; then
+  fail "extracted no ~/ai-orchestrator-adt/ paths from $DOC — the pattern no longer matches the document"
+elif [[ $missing -eq 0 ]]; then
+  pass "$n_paths ADT script path(s) named, all exist"
+fi
 
 if [[ $FAILS -eq 0 ]]; then
   echo; echo "All walkthrough-doc tests passed."
