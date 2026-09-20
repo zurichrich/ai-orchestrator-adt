@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from ticket_serializer import (FILING_LABEL, NON_TICKET_LABELS,  # noqa: E402
                                parse_md, emit_md,
                                to_issue, from_issue,
-                               _strip_slug_trailer)
+                               _derive_state, _strip_slug_trailer)
 
 
 # --------------------------------------------------------------------------
@@ -1459,6 +1459,126 @@ def _cache_path_for(cfg: dict, data: dict) -> str:
 
 
 # --------------------------------------------------------------------------
+# Carrying a lane move DOWN (AO-007).
+#
+# The push sends a lane up; nothing brought one back, so on a project synced by
+# two machines every machine after the first kept whatever lane it last saw —
+# 12 of 420 tickets wrong on the second machine when this was measured, seven of
+# them closed on GitHub while the local board still said `blocked`/`building`.
+# Nothing reported it, because the push's change test compares a file against
+# THIS machine's last push and never against the Issue.
+#
+# The fix MOVES THE FILE, and that is the whole of it. The folder is the source
+# of truth for a lane (build_kanban.load_items reads the lane from the folder,
+# and sync_stage_frontmatter rewrites `stage:` FROM the folder on every render).
+# Writing the pulled lane into the frontmatter and leaving the file where it is
+# would be reverted by the next render, which moves the push hash, which re-arms
+# the push, which sends the stale lane back up — and for a ticket GitHub has
+# closed that is `gh issue reopen` on every tick, on both machines, forever.
+# That is ADT-147's branching process with f = 1. Moving the file makes the
+# pull agree with the renderer instead of racing it.
+# --------------------------------------------------------------------------
+def _lane_names(cfg: dict) -> tuple:
+    """The lanes a pulled `stage:` label may name.
+
+    The project's `.adt/config.yaml` answers this on any installed project —
+    install writes an unconditional `stages:` block (lib/github-bootstrap.sh),
+    filling in the ADT defaults when the user omitted them. The fallback is for
+    a hand-built cfg dict or a config predating that block.
+
+    The fallback reads `build_kanban.STATUSES` rather than keeping a copy. The
+    lane list already exists in several places and the two shell copies have
+    drifted in order; a copy here would eventually make guard 1 refuse a lane
+    the board happily renders, and it would do it silently. The import is
+    function-local, this module's convention for reaching build_kanban (see
+    _canon_tix, _machine_id, _register_body, _ledger_costs, _ledger_totals),
+    which keeps adt_sync importable without build_kanban's transitive
+    constants.
+    """
+    names = tuple(s.get("name") for s in (cfg.get("stages") or [])
+                  if s.get("name"))
+    if names:
+        return names
+    from build_kanban import STATUSES
+    return tuple(STATUSES)
+
+
+def _relocate_to_stage(path: str, data: dict, recovered: dict, cfg: dict,
+                       pushed_hashes: dict):
+    """Move a cache file into the lane the Issue's `stage:` label names.
+
+    Returns the `relocated` results record when the file moved, else None.
+    `reconcile_all` reads `old_path`/`path`/`hash` back out of it to re-key the
+    sidecar; `results` is how this module already reports per-item state to its
+    caller (see `stage_label_changed`).
+
+    Four guards, all of which must hold. Three are policy; guard 2 is the price
+    of the lane having two representations, and it would disappear if the
+    frontmatter ever became authoritative for the lane:
+
+    1. The label names a known lane, and a different one. A `stage:` label is
+       written by ADT from a cache lane, so an unknown value means someone
+       hand-added one on github.com; moving a ticket into a folder named after
+       it would hide the ticket.
+    2. The file's folder agrees with its own `stage:` frontmatter. When they
+       disagree a local `mv` has happened that no render has caught up with yet,
+       so the frontmatter this compares against is stale. Leave it; the next
+       tick decides with current data.
+    3. The file has no unpushed local change (`_push_hash` matches the sidecar).
+       This is the conflict rule, and it needs no timestamp: the push runs
+       BEFORE the pull in a reconcile_all pass, so a local move has already gone
+       up by the time this runs, and a file that still matches its last pushed
+       hash cannot be holding one. Reading the sidecar from disk here is what
+       makes that work — inside a pass it is the pre-push state, so a file the
+       push just updated no longer matches and is left alone.
+    4. Nothing is already at the destination. os.rename OVERWRITES silently on
+       POSIX, so a same-slug ticket already in the target lane would be deleted.
+       Refuse instead and let the existing duplicate report (ADT-354) surface it.
+    """
+    gh_stage = recovered.get("stage")
+    if gh_stage == data.get("stage"):
+        return None                                   # nothing to carry down
+    if gh_stage not in _lane_names(cfg):
+        return None                                   # guard 1: unknown lane
+    if os.path.basename(os.path.dirname(path)) != (data.get("stage") or ""):
+        return None                                   # guard 2: mid-move
+    if pushed_hashes.get(path) != _push_hash(data):
+        return None                                   # guard 3: unpushed work
+    # The TYPE folder is carried over rather than recomputed from `type:`.
+    # Nothing in ADT relocates a ticket between type folders (ADT-155 made
+    # `type:` frontmatter-authoritative precisely because the folder has no
+    # mover), so re-deriving it here would start doing so as a side effect.
+    new_path = os.path.join(os.path.dirname(os.path.dirname(path)), gh_stage,
+                            os.path.basename(path))
+    if os.path.exists(new_path):
+        return None                                   # guard 4: collision
+    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+    # Rename FIRST. It is atomic and the write is not, so a crash between them
+    # leaves a correctly-placed file whose frontmatter the next render fixes.
+    # The other order leaves a correctly-labelled file in the wrong folder, and
+    # the render reverts the label — the failure this whole function avoids.
+    os.rename(path, new_path)
+    data["stage"] = gh_stage
+    # `state` is DERIVED from the new lane, never copied from the Issue. The
+    # renderer derives it from the folder (build_kanban.sync_stage_frontmatter),
+    # so a value taken from GitHub disagrees with it whenever the Issue is
+    # closed under a non-done lane label — which is most of what this ticket
+    # measured. The render would then rewrite the field, move the push hash,
+    # re-arm the push and run `gh issue reopen` every tick: ADT-147's flip,
+    # reintroduced through the second field. `_derive_state` is the same rule
+    # the serializer and the renderer both use, so the render is a no-op.
+    data["state"], data["state_reason"] = _derive_state(data)
+    _write_back(new_path, data)
+    # The hash the NEXT tick computes off disk is parse_md(emit_md(data)) —
+    # emit_md is what normalises, not the filesystem — so the round-trip is
+    # done in memory. Taking it from `data` directly would drift from the
+    # on-disk value and re-arm the push this exists to avoid.
+    return {"action": "relocated", "number": data.get("issue_number"),
+            "slug": data.get("slug"), "old_path": path, "path": new_path,
+            "hash": _push_hash(parse_md(emit_md(data)))}
+
+
+# --------------------------------------------------------------------------
 # Pull-side API discipline (ADT-101). The pull used to run a GraphQL
 # `gh issue list` fetching every Issue's full body + nested label/assignee
 # connections every tick — across two watch agents that drained the whole
@@ -1625,9 +1745,16 @@ def _created_within_grace(created_at: str | None,
     return 0 <= age < (RECONSTRUCT_GRACE_SECONDS if window is None else window)
 
 
-def pull_all(cfg: dict) -> list:
+def pull_all(cfg: dict, pushed_hashes: dict | None = None) -> list:
     """Bring GitHub-owned fields back into the cache; reconstruct missing cache
     files. Returns action summaries. Idempotent.
+
+    `pushed_hashes` is the file-hash map as it stood BEFORE this pass's push —
+    what `_relocate_to_stage`'s guard 3 compares against. `reconcile_all`
+    already holds it and passes it in; it defaults to reading the sidecar so a
+    standalone `pull_all(cfg)` still works. Stating it as a parameter is what
+    makes guard 3's correctness a property of the call rather than of
+    reconcile_all happening to persist after the pull.
 
     Incremental (ADT-101): fetch only Issues changed since the persisted
     watermark; full-sweep when the watermark is absent or the last sweep is
@@ -1656,6 +1783,11 @@ def pull_all(cfg: dict) -> list:
             n = data.get("issue_number")
             if n is not None:
                 by_number[int(n)] = (path, data)
+        # AO-007 guard 3 reads this. Only read from disk when the caller did
+        # not hand it over, and only inside `if issues:` so a fetch that
+        # returned nothing pays neither for this nor for the index above.
+        if pushed_hashes is None:
+            pushed_hashes = _load_sync_state(cfg)
 
         for issue in issues:
             num = issue.get("number")
@@ -1667,7 +1799,22 @@ def pull_all(cfg: dict) -> list:
                     if data.get(k) != recovered.get(k):
                         data[k] = recovered.get(k)
                         changed = True
-                if changed:
+                # AO-007: carry the LANE down, by moving the file. It writes
+                # the same mutated `data` at the new path, so the _PULL_OWNED
+                # fields above are persisted by its write and the old-path
+                # write below would be thrown away by the rename.
+                #
+                # A relocation into done/ does NOT run adt-done-guard.sh: that
+                # hook intercepts an agent's Bash `mv`, and this is an
+                # os.rename inside the sync. Deliberate — the move is a MIRROR
+                # of a claim GitHub already holds, gated on the machine that
+                # made it. A gate here could refuse a state GitHub has, and
+                # leave the two sides divergent for good.
+                moved = _relocate_to_stage(path, data, recovered, cfg,
+                                           pushed_hashes)
+                if moved:
+                    results.append(moved)
+                elif changed:
                     _write_back(path, data)
                     results.append({"action": "pulled", "number": num,
                                     "slug": data.get("slug")})
@@ -1862,7 +2009,20 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     # PULL second (Issues -> cache): GitHub-owned fields + missing files.
     if pull and not dry_run:
         try:
-            results.extend(pull_all(cfg))
+            pulled = pull_all(cfg, pushed_hashes=state)
+            results.extend(pulled)
+            # AO-007: a relocated ticket is ALREADY converged — its new content
+            # is what GitHub says — so record its hash under the new path and
+            # drop the old key. This has to happen HERE rather than inside
+            # pull_all: _persist_state below writes `file_hashes` from
+            # new_state wholesale (via _update_state_doc), so a hash pull_all
+            # wrote to the sidecar itself would be discarded on this same pass,
+            # and the next tick would see a changed file, re-arm the push, and
+            # send the lane it just pulled straight back up.
+            for r in pulled:
+                if r.get("action") == "relocated" and r.get("hash"):
+                    new_state.pop(r.get("old_path"), None)
+                    new_state[r["path"]] = r["hash"]
         except RateLimitError as e:
             results.append({"action": "rate-limited", "error": f"pull: {e}"})
         except GhError as e:

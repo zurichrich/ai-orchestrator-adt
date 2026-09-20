@@ -107,6 +107,41 @@ push is authoritative for content/stage (title, body, labels, open/closed);
 pull is authoritative for GitHub-owned fields (`issue_number`, `issue_node_id`,
 `assignees`, GitHub-side comments). Push runs first each pass.
 
+**The lane is the one exception, and it travels both ways (AO-007).**
+For a ticket whose cache file holds no unpushed local change,
+the pull also moves the file into the stage folder the Issue's `stage:` label
+names. Without that, a lane move only ever travelled up, so on a project synced
+by two machines every machine after the first kept whatever lane it last saw —
+measured at 12 of 420 tickets wrong on the second machine, seven of them closed
+on GitHub while the local board still read `blocked` or `building`.
+
+It **moves the file** rather than writing `stage:` into the frontmatter, because
+the folder is what the board reads: `build_kanban.load_items` takes a ticket's
+lane from its folder and `sync_stage_frontmatter` rewrites `stage:` from the
+folder on every render. A pulled value written into the frontmatter alone would
+be reverted by the next render, which re-arms the push, which sends the stale
+lane back up — and for a ticket GitHub has closed, that is a `gh issue reopen`
+on every tick, on both machines. Four guards keep it from overwriting local
+work: the label must name a known lane; the file's folder must agree with its
+own `stage:` (otherwise a local `mv` is in flight that no render has caught up
+with); the file must match its last pushed hash; and nothing may already sit at
+the destination, since `os.rename` overwrites silently.
+
+Two limits worth stating. **It converges the lane and nothing else** — title and
+body stay push-only, written from the Issue on the reconstruct branch alone, so
+a second machine shows the ticket in the right lane with whatever body it last
+held locally. And `state:` is **derived from the destination lane**, never
+copied from the Issue: the renderer derives it from the folder, so copying
+GitHub's value would disagree with the render whenever an Issue is closed under
+a non-done lane label, and the disagreement would re-arm the push and reopen the
+Issue on every tick.
+
+**The relocation does not run the done gate, by design.**
+`defaults/hooks/adt-done-guard.sh` intercepts an agent's Bash `mv`; the sync's
+`os.rename` never passes through it. The move is a *mirror* of a claim GitHub
+already holds, and that claim was gated on the machine that made it. A gate here
+could only refuse a state GitHub has, leaving the two sides divergent for good.
+
 ## Ticket id == issue number (ADT-9)
 
 The ticket id is **derived from the GitHub issue number**: `id := <PREFIX>-N`
@@ -224,6 +259,14 @@ unnecessary**:
   pull-owned fields sets `f` = 0 by construction, so `R` = 0 for any machine
   count. The fields stay in the file — the board's recency sort reads
   `updated` — they are only outside the hash.
+
+  The lane relocation above (AO-007) writes `stage:`, which **is** inside the
+  hash, so it keeps `f` = 0 a second way: `reconcile_all` records the moved
+  file's new hash under its new path before persisting the sidecar, so the next
+  tick reads the file as converged and makes no call. That recording has to
+  happen in `reconcile_all` rather than in `pull_all`, because `_persist_state`
+  writes `file_hashes` wholesale from its own `new_state` and would otherwise
+  discard a hash the pull had written on the same pass.
 - **Persisted Projects context.** The board's field and option ids
   (`project view` + `field-list`) are cached per process **and** persisted to
   the sidecar under `project_ctx`, because every launchd tick is a fresh
