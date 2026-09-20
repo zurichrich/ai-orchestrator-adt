@@ -205,6 +205,16 @@ checking. An unbound close is one that hook cannot check.
    existing `dev/<slug>` tree). Message: `release: <slug>`. Push, open a PR, and
    merge it yourself.
 
+   > **If that file is under `commands/` or `defaults/`, do step 9's refresh
+   > BEFORE this commit, and put the regenerated `.claude/` in the SAME commit.**
+   > In ADT's own repo `.claude/` is both committed and generated, and
+   > `tests/test_installed_copies_match_source.sh` goes red the moment a source
+   > playbook changes without it. Step 9 comes later in this list only because it
+   > also covers consumer projects; taking the steps in the written order merges
+   > a red `main` and repairs it in a second PR. Run `bash lib/resync.sh` first,
+   > then commit source and copies together (AO-007 merged the red state and had
+   > to follow it with a repair PR).
+
 8. **Remove the branch and worktree.** It is safe now because the code is on
    `main`. Run `git worktree list`, then `git worktree remove <path>`, then
    `git branch -d <branch>` (**the safe delete, which refuses an unmerged
