@@ -248,6 +248,24 @@ done_evidence:
      8. **Does the scope match the claim?** Write the claim as a sentence, then
         check that the condition's path arguments cover everything the claim
         covers. Run the positive form over a WIDER scope and read what it finds.
+     9. **Naming a test with `-k` does not check that the test exists.**
+        `pytest <file> -q -k <name>` with no match prints `N deselected` and
+        **exits 0**, and `_NO_WORK` matches only `no tests ran` / `Ran 0 tests` /
+        `0 passed, 0 failed` — so a renamed, mistyped or never-written test
+        grades GREEN. Name it as a node id instead:
+        `pytest "<file>::<name>" -q`, which exits 4 and prints `no tests ran`
+        when the name is absent. Both forms dry-run identically before the file
+        exists, so the dry-run cannot tell them apart (AO-007).
+    10. **A `grep -qF` literal the build has yet to write must be kept on ONE
+        line.** `grep -F` matches within a line, so a literal that the build
+        wraps at 80 columns straddles a newline and the condition goes red
+        against prose that says exactly what it should. The plan-time dry-run
+        cannot catch this — the target prose does not exist yet, so the
+        condition is red for the expected reason and looks correctly authored.
+        Name each literal in the sub-step that writes it AND say it must be
+        unbroken. When it happens anyway, reflow the prose; do not shorten the
+        pattern, which loosens an approved condition (AO-005, then AO-007 one
+        ticket later — the first time it was recorded only in a retro).
 
      **Never pin a condition whose only access to the repo is through a REF.** A
      worktree shares the git dir, so `origin/…`, a tag or `HEAD` resolve to the

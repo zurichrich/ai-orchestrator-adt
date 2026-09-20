@@ -127,3 +127,23 @@ Every finding was re-verified locally before being applied, and two agent claims
 were wrong on detail (one mis-stated which config file carries `stages:`, one
 mis-predicted that the real `load_items` would be impure in a test) — both cheap
 to check, and checking is what made the rest trustworthy.
+
+### 5. The close merged a red `main`, because the playbook's step order says to
+
+`.claude/` in ADT's own repo is both committed and generated, and
+`tests/test_installed_copies_match_source.sh` goes red the moment a source
+playbook changes without a regeneration. `/adt-close` step 7 commits the tracked
+files the close wrote; step 9 refreshes the installed copies. Taking them in the
+written order merges the source change with stale copies — which is what
+happened here, and it needed a second PR to repair.
+
+Step 9 sits after step 7 because it also covers consumer projects, where the
+refresh is a separate concern with its own branch. In ADT's own repo the two are
+one commit. `commands/close.md` now says so at step 7, so the next close that
+edits a playbook regenerates before committing rather than after.
+
+Worth noting what did *not* catch it: nothing. There is no CI (ADR-036), the
+done-gate hook grades the ticket's DoD rather than the repo's suite, and the
+ticket's own `no-regression` condition names the sync test files, not this one.
+The red state was found by reading step 9 and asking what it would change —
+which is the check the playbook's own ordering had already lost.

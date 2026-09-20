@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.2.0",
-  "source_commit": "4f13107f940e5c499edca658c48281c123444ef2",
+  "source_commit": "3faedb35a721fe6d754a92c5a1df33cb678fbef9",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -46,7 +46,7 @@
     },
     {
       "path": "commands/adt-close.md",
-      "sha256": "1df68306483c49aa3345539a385e228ae54bbcf05fb99823f49df4480afef158"
+      "sha256": "9747ade4447ea0d13c6487838be9199f6954fd0fe336fc926faaeaecbf6e8bde"
     },
     {
       "path": "commands/adt-decide.md",
@@ -58,7 +58,7 @@
     },
     {
       "path": "commands/adt-plan.md",
-      "sha256": "b309bf7934f89eaeeae1ccfe96ee263c512a6ec5e646c247117b949c2c6f2649"
+      "sha256": "9f6e2f6bcf717f2bfa6aafa857e38086ae22d457d2f1a9d6304b8150c7434df4"
     },
     {
       "path": "commands/adt-qa-run.md",
