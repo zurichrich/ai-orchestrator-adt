@@ -418,7 +418,9 @@ def _health_stamp(cfg: dict) -> float | None:
     Never coerce it to 0.0, which the page would read as long expired.
     """
     v = adt_sync._load_state_doc(cfg).get("healthy_until")
-    return float(v) if isinstance(v, (int, float)) else None
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return float(v)
 
 
 def _stamp_health(cfg: dict, now: float) -> None:
