@@ -488,3 +488,52 @@ def test_watch_render_wires_the_window(tmp_path, monkeypatch):
 
     assert seen.get("project_name") == "probe", seen
     assert seen.get("healthy_until") == 1_700_000_000.0 + 360.0, seen
+
+
+# ── 1h: markup and accessibility, in the rendered page ──────────────────────
+
+def test_pill_markup_is_accessible(tmp_path, monkeypatch):
+    """A real button, reachable by Tab, with state in words as well as colour.
+
+    Asserted on the rendered page rather than left to the UI walkthrough: it
+    needs no browser, so waiving it would waive something checkable.
+    """
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    page = _page(tmp_path, healthy_until=1_700_000_000)
+    tag = re.search(r'<button[^>]*id="board-sync"[^>]*>', page).group(0)
+
+    assert tag.startswith("<button"), "not a real button; Tab would skip it"
+    assert 'type="button"' in tag, "a bare button in a form would submit it"
+    # The dot and the word live inside it: colour is never the only channel.
+    assert '<span class="sync-dot">' in page
+    assert '<span class="sync-label">' in page
+
+    js = build_kanban.HTML_JS
+    # aria-pressed and aria-label are set at decision time, not render time —
+    # the same reason the class is. Both must be there to be set.
+    assert "aria-pressed" in js and "aria-label" in js
+    assert "el.hidden = false" in js, "the pill is never revealed"
+
+
+def test_commands_are_attribute_escaped(tmp_path, monkeypatch):
+    """A hostile project name cannot break out of the attribute.
+
+    The commands contain $(id -u) and ~, and the project name comes from
+    config. Nothing here is attacker-controlled today, but an attribute that
+    truncates on a quote swallows the rest of the tag.
+    """
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    build_kanban.configure(str(tmp_path), project_name='we"ird',
+                           healthy_until=1_700_000_000)
+    pill = build_kanban._sync_pill()
+    assert pill, "fixture produced no pill"
+
+    # The slug drops the quote before it can reach an attribute at all.
+    assert "we-ird" in pill
+    stop_value = pill.split('data-stop="')[1].split('"')[0]
+    assert stop_value.endswith("com.adt.we-ird.watch"), stop_value
+    assert '"' not in stop_value
+
+    # One element, not a truncated tag plus loose text.
+    assert pill.count("<button") == 1 and pill.count("</button>") == 1
+    assert pill.count(">") == pill.count("<")
