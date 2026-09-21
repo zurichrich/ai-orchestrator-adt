@@ -62,3 +62,28 @@ def test_slug_matches_shell():
         if got != want:
             mismatches.append(f"{name!r}: python={got!r} shell={want!r}")
     assert not mismatches, "watcher_slug drifted from lib/watcher.sh:\n" + "\n".join(mismatches)
+
+
+# ── 1b: both platform branches, including the one this machine never runs ────
+
+def test_commands_both_platforms(monkeypatch):
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    stop, start = build_kanban.watcher_commands("my-proj")
+    assert stop == "launchctl bootout gui/$(id -u)/com.adt.my-proj.watch"
+    assert start == (
+        "launchctl bootstrap gui/$(id -u) "
+        "~/Library/LaunchAgents/com.adt.my-proj.watch.plist")
+
+    monkeypatch.setattr(build_kanban.sys, "platform", "linux")
+    stop, start = build_kanban.watcher_commands("my-proj")
+    assert stop == "systemctl --user stop adt-watch-my-proj.timer"
+    assert start == "systemctl --user start adt-watch-my-proj.timer"
+
+    # Neither supervisor: no commands, so 1d renders no button rather than one
+    # whose click copies nothing.
+    monkeypatch.setattr(build_kanban.sys, "platform", "win32")
+    assert build_kanban.watcher_commands("my-proj") == ("", "")
+
+    # No slug is the same case.
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    assert build_kanban.watcher_commands("") == ("", "")

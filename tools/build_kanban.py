@@ -28,6 +28,7 @@ import shutil
 import html
 import re
 import subprocess
+import sys
 from collections import defaultdict
 
 # ADT-115: the pricer. One direction only — adt_cost never imports this module,
@@ -1946,6 +1947,31 @@ def watcher_slug(name: str) -> str:
     s = re.sub(r"[^a-z0-9]", "-", name.lower())
     s = re.sub(r"-{2,}", "-", s)
     return s.strip("-")
+
+
+def watcher_commands(slug: str) -> tuple[str, str]:
+    """(stop, start) for this machine's watcher agent, or ("", "") if neither
+    supervisor applies.
+
+    Chosen by sys.platform at RENDER time, which is the right clock: the board
+    is rendered by the watcher, on the machine the watcher runs on, so the
+    platform that rendered the page is the platform whose agent the reader would
+    stop. lib/watcher.sh installs a launchd user agent on darwin and a
+    `systemd --user` timer elsewhere; anything else gets no commands and the
+    caller renders no button.
+    """
+    if not slug:
+        return "", ""
+    if sys.platform == "darwin":
+        label = f"com.adt.{slug}.watch"
+        return (f"launchctl bootout gui/$(id -u)/{label}",
+                f"launchctl bootstrap gui/$(id -u) "
+                f"~/Library/LaunchAgents/{label}.plist")
+    if sys.platform.startswith("linux"):
+        unit = f"adt-watch-{slug}.timer"
+        return (f"systemctl --user stop {unit}",
+                f"systemctl --user start {unit}")
+    return "", ""
 
 
 def render_html(items: list[Item]) -> str:
