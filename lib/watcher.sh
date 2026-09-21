@@ -142,20 +142,35 @@ install_watcher() {
     <key>Label</key>
     <string>$label</string>
     <!-- ADT board sync. Every ${interval}s it reconciles the local ticket cache
-         to GitHub Issues + re-renders the kanban (adt_watch.py --once). Runs as a
-         user agent so the gh keychain credential resolves. NOT a resident loop:
-         --once each tick so a hung pass is replaced next interval. Read-only to
-         the code; touches only gh + the local cache. Installed by adt-install.sh. -->
+         to GitHub Issues + re-renders the kanban. Runs as a user agent so the gh
+         keychain credential resolves. Read-only to the code; touches only gh +
+         the local cache. Installed by adt-install.sh.
+
+         RESIDENT since AO-006. This was --once on a StartInterval, deliberately:
+         a hung pass was replaced on the next tick. The board's stop/start button
+         POSTs to this process, and a --once tick is gone 59 seconds out of 60,
+         so there was nothing alive to take the click. Three earlier designs of
+         that ticket tried to route around this and each one failed on it.
+
+         What it costs, stated rather than discovered later: a wedged pass now
+         stays wedged. adt_sync's pass lock keeps that safe rather than
+         corrupting, but it can stall quietly and nothing watches for it yet.
+         KeepAlive restarts the agent if the process dies, which is a different
+         failure from a pass that hangs.
+
+         The listener binds 127.0.0.1 and serves two routes: the rendered board,
+         and the toggle. See _serve_board in tools/adt_watch.py. -->
     <key>ProgramArguments</key>
     <array>
         <string>$py</string>
         <string>$watch</string>
         <string>--root</string>
         <string>$path</string>
-        <string>--once</string>
+        <string>--interval</string>
+        <string>$interval</string>
     </array>
-    <key>StartInterval</key>
-    <integer>$interval</integer>
+    <key>KeepAlive</key>
+    <true/>
     <key>RunAtLoad</key>
     <true/>
     <key>WorkingDirectory</key>

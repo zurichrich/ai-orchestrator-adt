@@ -112,12 +112,16 @@ grep -q "^bootstrap gui/[0-9]* $ADT_PLIST" "$LOG" \
 echo "[test] a changed interval replaces the plist and reloads the agent"
 : > "$LOG"
 run "install_watcher '$ADT_DIR' myproj '$PROJ' 120" >/dev/null
-if grep -q "<integer>120</integer>" "$ADT_PLIST" \
+# AO-006: the interval is an argv string now, not a StartInterval integer — the
+# agent is resident and runs the loop itself. Asserted as the argument that
+# FOLLOWS --interval, which pins the pairing; the old `<integer>120</integer>`
+# grep would have matched that number anywhere in the file.
+if grep -A1 -- "--interval" "$ADT_PLIST" | grep -q "<string>120</string>" \
     && grep -q "bootout gui/[0-9]*/com.adt.myproj.watch" "$LOG" \
     && grep -q "^bootstrap gui/[0-9]* $ADT_PLIST" "$LOG"; then
   pass "changed interval replaces the plist and reloads it"
 else
-  fail "changed interval not applied: $(grep -o '<integer>[0-9]*</integer>' "$ADT_PLIST"); calls: $(tr '\n' ';' < "$LOG")"
+  fail "changed interval not applied: $(grep -A1 -- '--interval' "$ADT_PLIST" | tr '\n' ' '); calls: $(tr '\n' ';' < "$LOG")"
 fi
 
 # ── uninstall removes every watcher for the project ───────────────────────

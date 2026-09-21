@@ -423,44 +423,56 @@ def _set_paused(cfg: dict, cache: str, paused: bool) -> bool:
 
 
 def _serve_board(cfg: dict, cache: str, port: int):
-    """Serve the rendered board and accept the toggle, in this same process.
+    """Serve the board and accept the toggle, in this same process.
 
-    GET  /            -> kanban.html      (and every other file beside it)
-    POST /sync/toggle -> flip, then report the new state as JSON
+    Exactly two routes, and no file handler:
 
-    Bound to 127.0.0.1 only. The board opened as a file:// URL still renders;
-    its button simply does nothing, because the page checks its own protocol.
+        GET  /            -> the rendered kanban.html, read fresh per request
+        POST /sync/toggle -> flip, then report the new state as JSON
+
+    Deliberately NOT SimpleHTTPRequestHandler rooted at the cache: that would
+    put every ticket .md on a socket to answer one question about one file.
+    Anything else gets a 404. Bound to 127.0.0.1, so it is not reachable off
+    this machine. A board opened as a file:// URL still renders; its button
+    disables itself, because there is nothing to POST to.
     """
     import http.server
     import json as _json
     import socketserver
     import threading
 
-    class _H(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=cache, **kw)
+    board = os.path.join(cache, "kanban.html")
 
-        def _json(self, payload, code=200):
-            body = _json.dumps(payload).encode()
+    class _H(http.server.BaseHTTPRequestHandler):
+        server_version = "adt-watch"
+
+        def _send(self, body: bytes, ctype: str, code: int = 200):
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
 
         def do_POST(self):
             if self.path.rstrip("/") != "/sync/toggle":
-                self._json({"error": "not found"}, 404)
+                self._send(b'{"error":"not found"}', "application/json", 404)
                 return
-            now_paused = _set_paused(cfg, cache, not _is_paused(cache))
-            print(f"  [adt-watch] sync {'paused' if now_paused else 'resumed'} "
+            paused = _set_paused(cfg, cache, not _is_paused(cache))
+            print(f"  [adt-watch] sync {'paused' if paused else 'resumed'} "
                   f"from the board.", file=sys.stderr)
-            self._json({"paused": now_paused})
+            self._send(_json.dumps({"paused": paused}).encode(),
+                       "application/json")
 
         def do_GET(self):
-            if self.path in ("", "/"):
-                self.path = "/kanban.html"
-            super().do_GET()
+            if self.path.split("?")[0].rstrip("/") not in ("", "/"):
+                self._send(b"not found", "text/plain", 404)
+                return
+            try:
+                with open(board, "rb") as fh:
+                    self._send(fh.read(), "text/html; charset=utf-8")
+            except OSError:
+                self._send(b"the board has not been rendered yet",
+                           "text/plain", 503)
 
         def log_message(self, *a):
             pass                      # ADT-119: an idle tick writes zero bytes
