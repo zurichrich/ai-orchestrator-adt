@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -392,6 +393,15 @@ RATE_FLOOR_SHARE = 0.15
 # into.
 BOARD_PORT = 8787
 
+# AO-006 / security review. `adt_sync._update_state_doc` is a read-whole-doc,
+# patch-one-key, write-whole-doc operation whose no-clobber guarantee assumed a
+# single writer under the pass lock. The control server gives this module a
+# SECOND thread that writes the sidecar, so ANY interleaving between its read
+# and its write and the loop's own write silently discards one side — whichever
+# top-level keys each touched. Every state write in this module takes this lock;
+# it is the thing that restores the guarantee the docstring claims.
+_STATE_LOCK = threading.Lock()
+
 
 def _pause_flag(cache: str) -> str:
     """Where the paused marker lives. In the cache, so it is outside every git
@@ -426,7 +436,8 @@ def _set_paused(cfg: dict, cache: str, paused: bool) -> bool:
             pass
         # Expire the window: one second past, so the pill is red on the very
         # next render rather than at the end of the old window.
-        adt_sync._update_state_doc(cfg, {"healthy_until": time.time() - 1.0})
+        with _STATE_LOCK:
+            adt_sync._update_state_doc(cfg, {"healthy_until": time.time() - 1.0})
     elif os.path.exists(flag):
         os.unlink(flag)
     return _is_paused(cache)
@@ -448,6 +459,7 @@ def _serve_board(cfg: dict, cache: str, port: int):
     """
     import http.server
     import json as _json
+    import urllib.parse
     import socketserver
     import threading
 
@@ -464,8 +476,11 @@ def _serve_board(cfg: dict, cache: str, port: int):
             The board carries every ticket body and the cost figures, so a
             readable GET is a real leak.
             """
-            host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
-            return host in ("127.0.0.1", "localhost", "::1", "")
+            raw = self.headers.get("Host")
+            if not raw:
+                return False          # mandatory in every browser request
+            return raw.rsplit(":", 1)[0].strip("[]") in (
+                "127.0.0.1", "localhost", "::1")
 
         def _same_origin(self) -> bool:
             """Reject a cross-origin toggle.
@@ -482,7 +497,16 @@ def _serve_board(cfg: dict, cache: str, port: int):
             origin = self.headers.get("Origin")
             if origin is None:
                 return True                  # a same-origin fetch sends none
-            return origin.startswith(("http://127.0.0.1", "http://localhost"))
+            # Parsed, not prefix-matched: startswith() accepted
+            # http://127.0.0.1.evil.com and http://localhost.evil.com. Not
+            # reachable through a browser while the custom header forces a
+            # preflight this server never answers — but it is a live bypass the
+            # moment anyone relaxes that requirement.
+            try:
+                host = urllib.parse.urlsplit(origin).hostname
+            except ValueError:
+                return False
+            return host in ("127.0.0.1", "localhost", "::1")
 
         def _send(self, body: bytes, ctype: str, code: int = 200):
             self.send_response(code)
@@ -575,8 +599,10 @@ def _health_stamp(cfg: dict) -> float | None:
 
 
 def _stamp_health(cfg: dict, now: float) -> None:
-    """Publish the window. One key, so this cannot disturb `watch`."""
-    adt_sync._update_state_doc(cfg, {"healthy_until": _health_window(now)})
+    """Publish the window. Under _STATE_LOCK: the control server's thread writes
+    the same sidecar, and the merge is not atomic."""
+    with _STATE_LOCK:
+        adt_sync._update_state_doc(cfg, {"healthy_until": _health_window(now)})
 
 
 def _watch_state(cfg: dict) -> dict:
@@ -590,8 +616,9 @@ def _watch_state(cfg: dict) -> dict:
 
 
 def _save_watch_state(cfg: dict, quiet: int, next_due: float, fp: str) -> None:
-    adt_sync._update_state_doc(
-        cfg, {"watch": {"quiet": quiet, "next_due": next_due, "fp": fp}})
+    with _STATE_LOCK:
+        adt_sync._update_state_doc(
+            cfg, {"watch": {"quiet": quiet, "next_due": next_due, "fp": fp}})
 
 
 def _backoff_due(quiet: int, now: float) -> float:

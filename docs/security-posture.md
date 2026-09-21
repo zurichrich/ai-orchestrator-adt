@@ -20,6 +20,41 @@ Prompts and transcripts are never logged by ADT. The token ledger records
 *counts* per turn (input, output, cache-read, cache-write) grouped by model, and
 never content.
 
+## Network ingress
+
+**ADT listens on exactly one socket, and this section is all of it.**
+
+Enforced the way egress is: `tools/tests/test_ingress_disclosure.py` finds every
+`bind(` in `tools/`, `lib/` and `collector/` and fails if a listener is not
+described here. Open a port and forget to document it, and the suite goes red.
+
+| Listener | When | Serves | Reachable by |
+|---|---|---|---|
+| `127.0.0.1:8787` (`_serve_board`, `tools/adt_watch.py`) | Whenever the watcher runs, which since AO-006 is continuously — the agent is resident so the board's stop/start button has a process to talk to. | `GET /` returns the rendered board, which inlines every ticket's title, body and stage, plus per-ticket token and cost figures. `POST /sync/toggle` pauses or resumes this project's sync. Every other path and method is refused. | Loopback only. See the trade-off below. |
+
+**What protects it, and what does not.**
+
+The `Host` header must be loopback, which is the defence against DNS rebinding —
+binding to `127.0.0.1` is not, because a name an attacker controls can resolve
+there and the browser will send that name. `POST` additionally requires an
+`X-ADT-Board: 1` header, which makes any cross-origin attempt a preflighted
+request that this server never answers, so a page in another tab cannot reach
+the toggle. Both holes were live and measured before those checks existed.
+
+**The trade-off, stated rather than implied: there is no authentication beyond
+the loopback bind.** This is a plain TCP socket, not a Unix domain socket with
+owner-only permissions, so **any local account on the machine** can read your
+whole backlog and stop your sync by sending the headers itself. The
+browser-facing checks above stop a remote page; they do not stop a local
+process. That is an accepted trade-off for a single-developer workstation, which
+is what ADT targets. On a genuinely shared host it is not adequate, and the fix
+is a per-install token checked on both routes, or a Unix domain socket scoped to
+the owner's uid. Neither is implemented.
+
+There is no opt-out flag. If the port is already taken the watcher logs it and
+carries on without the listener; the board still renders and its button disables
+itself.
+
 ## Network egress
 
 **Every outbound destination ADT can contact is listed in this section.**

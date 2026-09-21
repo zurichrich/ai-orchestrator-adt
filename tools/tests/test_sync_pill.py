@@ -722,3 +722,73 @@ def test_toggle_reports_what_the_server_said(tmp_path):
     assert out["started"]["label"] == "started", (
         "a start reported 'stopped'; the label must echo the server, not a guess")
     assert out["failed"]["label"] == "failed"
+
+
+def test_origin_must_be_loopback_by_hostname(tmp_path):
+    """A prefix match accepted http://127.0.0.1.evil.com.
+
+    Not reachable through a browser while the custom header forces a preflight
+    this server never answers — but it is a live bypass the moment anyone
+    relaxes that requirement, and the suite only ever tried an obviously
+    foreign origin. Security review, MEDIUM.
+    """
+    cfg, cache, srv, base = _board_server(tmp_path)
+    try:
+        for origin in ("http://127.0.0.1.evil.com", "http://localhost.evil.com",
+                       "null", "http://evil.com"):
+            code, _ = _req(base + "/sync/toggle", method="POST",
+                           headers={"X-ADT-Board": "1", "Origin": origin})
+            assert code == 403, f"{origin} was accepted"
+            assert adt_watch._is_paused(cache) is False
+        # ...and a real same-origin request still works.
+        code, _ = _req(base + "/sync/toggle", method="POST",
+                       headers={"X-ADT-Board": "1", "Origin": base})
+        assert code == 200 and adt_watch._is_paused(cache) is True
+    finally:
+        srv.shutdown()
+
+
+def test_state_writes_are_serialised(tmp_path):
+    """The control server's thread and the loop both write the sidecar.
+
+    `_update_state_doc` is a read-whole-doc / patch / write-whole-doc, so any
+    interleaving drops one side's write regardless of which keys each touched.
+
+    Each thread writes a strictly INCREASING value to its own key and reads both
+    back. A lost update makes the other key go backwards, which identical values
+    could never reveal — the first version of this test wrote the same numbers
+    from both threads and passed with the lock removed. Security review, HIGH.
+    """
+    import threading as _th
+    root = _project(tmp_path)
+    cfg = adt_sync.load_config(root)
+    adt_watch._save_watch_state(cfg, 0, 0.0, "fp")
+    adt_watch._stamp_health(cfg, 0.0)
+
+    stop = _th.Event()
+    regressions = []
+
+    def writer(write, read_other):
+        seen = 0.0
+        n = 0
+        while not stop.is_set() and len(regressions) < 5:
+            n += 1
+            write(n)
+            other = read_other()
+            if other < seen:
+                regressions.append(f"{other} < {seen}")
+            seen = max(seen, other)
+
+    a = _th.Thread(target=writer, args=(
+        lambda n: adt_watch._save_watch_state(cfg, n, float(n), "fp"),
+        lambda: adt_watch._health_stamp(cfg) or 0.0))
+    b = _th.Thread(target=writer, args=(
+        lambda n: adt_watch._stamp_health(cfg, float(n)),
+        lambda: float(adt_watch._watch_state(cfg).get("next_due") or 0.0)))
+    a.start(); b.start()
+    time.sleep(2.0)
+    stop.set(); a.join(); b.join()
+
+    assert not regressions, (
+        f"{len(regressions)} lost update(s) — a value went backwards, so one "
+        f"thread's write was discarded: {regressions[:3]}")
