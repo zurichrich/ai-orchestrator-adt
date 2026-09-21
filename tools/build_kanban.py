@@ -1926,6 +1926,28 @@ def _machines_footer() -> str:
             + "".join(rows) + "</footer>")
 
 
+def watcher_slug(name: str) -> str:
+    """A launchd/systemd-safe id from a project name.
+
+    MIRROR of `_watcher_slug` in lib/watcher.sh:31 — the shell is the original,
+    because install is what names the agent. The copy exists here because the
+    board must compose the stop/start command for an agent it did not install,
+    and the alternative (carrying the slug in .adt/config.yaml) needs the
+    installer's source order changed and every existing install re-run:
+    lib/watcher.sh is sourced AFTER lib/github-bootstrap.sh in both
+    adt-install.sh and setup.sh, so write_project_config cannot see it.
+
+    The same mirroring is done deliberately elsewhere (adt_cost.canon_tix). A
+    mirror that drifts composes a command naming an agent that does not exist,
+    so test_sync_pill.py::test_slug_matches_shell runs the SHELL function itself
+    over a table of awkward names rather than restating its rules here.
+    """
+    # tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//'
+    s = re.sub(r"[^a-z0-9]", "-", name.lower())
+    s = re.sub(r"-{2,}", "-", s)
+    return s.strip("-")
+
+
 def render_html(items: list[Item]) -> str:
     by_bucket: dict[tuple[str, str], list[Item]] = defaultdict(list)
     for it in items:
