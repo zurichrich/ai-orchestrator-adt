@@ -16,6 +16,7 @@ The cardinal rule (the brief's safety constraint): **no agent narration is ever
 an input.** Every condition is a regex match against a rendered file or a
 process exit code — something external to the agent's say-so.
 """
+import ast
 import os
 import re
 import subprocess
@@ -960,6 +961,291 @@ def dependency_defects(ticket_md_path):
     return out
 
 
+# ── AO-013 gap 1: a borrowed value is traced to the end of its function ──────
+# AO-006 replaced four designs and three failed the same way: a value produced
+# inside `adt_watch.py`'s tick loop was reused to mean something it does not mean
+# at the source. Every one was discoverable by reading a single function to its
+# end — `_backoff_due`'s eager `return 0.0` sat four lines below code the spec had
+# already quoted. `commands/plan.md` said "understand the existing code first" and
+# required no artifact, so nothing could tell a complete read from a partial one.
+#
+# A Design bullet that depends on an existing value now declares it:
+#
+#   - borrows: `tools/adt_watch.py:387-406` `_backoff_due` — exits 404, 406 —
+#     0.0 at 404 is gate 1's "run eagerly" sentinel, not a timestamp.
+#
+# and this asserts the two halves a partial read gets wrong: the declared span is
+# the function's real span, and the declared exit lines are every `return`
+# directly inside it. Both come from `ast`, so neither is a judgement call.
+#
+# WHY NOT "every file.py:NN citation must span its whole function", which would
+# need no new convention: measured against AO-006's own Design, it flagged 10 of
+# 15 citations — including a 141-line function and two off-by-one spans — on a
+# spec that ended SOUND. A check that fires on two thirds of correct work gets
+# worked around, which is the reasoning `_CAVEAT_MARKERS` already records.
+#
+# Python only. All four AO-006 failures were Python, `ast` gives exact spans with
+# no dependency, and a shell function needs a heuristic that would have to be
+# right to be worth having.
+_BORROW_NONE = re.compile(r"^none\b", re.IGNORECASE)
+_BORROW_SPEC = re.compile(
+    r"`?(?P<path>[A-Za-z_][\w./-]*\.py):(?P<start>\d+)-(?P<end>\d+)`?\s+"
+    r"`?(?P<sym>[A-Za-z_][\w.]*)`?\s*(?:—|--|-)\s*"
+    r"exits\s+(?P<exits>none|\d[\d,\s]*)", re.IGNORECASE)
+# A citation of ONE line, or of a range: what the second arm scans for.
+_PY_CITATION = re.compile(r"`?([A-Za-z_][\w./-]*\.py):(\d+)(?:-(\d+))?`?")
+_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", ".claude"}
+
+
+def _repo_root(start=None):
+    """The git toplevel of `start` (default: cwd), or None outside a repo.
+
+    Deliberately NOT `_default_cwd`: that one takes `devteam` and falls back to
+    its parent, which is the right answer for running a condition and the wrong
+    one here — a borrow citation resolves against the tree being planned, or it
+    does not resolve at all.
+    """
+    try:
+        r = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                           cwd=start, capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_py(path, root):
+    """The file a citation names, or None when it does not resolve UNIQUELY.
+
+    A spec cites `adt_watch.py`, not `tools/adt_watch.py`, so a basename search
+    is required. It fails open on ambiguity: `.claude/` holds installed copies of
+    several tools, so a basename can legitimately match twice, and refusing a
+    plan over which copy was meant would be a gate nobody can satisfy.
+    """
+    direct = os.path.join(root, path)
+    if os.path.isfile(direct):
+        return direct
+    base, hits = os.path.basename(path), []
+    for dirpath, dirnames, files in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        if base in files:
+            hits.append(os.path.join(dirpath, base))
+    return hits[0] if len(hits) == 1 else None
+
+
+def _defs(py_path):
+    """{qualified name: node} for every function in a file, or None if unparsable."""
+    try:
+        tree = ast.parse(open(py_path, encoding="utf-8").read())
+    except (OSError, SyntaxError):
+        return None
+    out = {}
+
+    def walk(node, prefix):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = prefix + child.name
+                out.setdefault(name, []).append(child)
+                if name != child.name:
+                    # A bare-name alias, so a spec may cite `method` without its
+                    # class. Guarded: at module level the two names are equal and
+                    # an unguarded alias registers every top-level function twice,
+                    # which reads as "matches 2 functions" on a correct citation.
+                    out.setdefault(child.name, []).append(child)
+                walk(child, name + ".")
+            elif isinstance(child, ast.ClassDef):
+                walk(child, prefix + child.name + ".")
+            else:
+                walk(child, prefix)
+
+    walk(tree, "")
+    return out
+
+
+def _direct_returns(node):
+    """Line numbers of the `return`s belonging to THIS function.
+
+    A `return` inside a nested `def` is that function's exit, not this one's, so
+    counting it would make a correct declaration fail.
+    """
+    lines, stack = [], list(ast.iter_child_nodes(node))
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        if isinstance(n, ast.Return):
+            lines.append(n.lineno)
+        stack.extend(ast.iter_child_nodes(n))
+    return sorted(lines)
+
+
+def _enclosing_def(defs, line):
+    """The innermost function containing `line`, or None."""
+    best = None
+    for nodes in defs.values():
+        for n in nodes:
+            end = getattr(n, "end_lineno", None)
+            if end and n.lineno <= line <= end:
+                if best is None or n.lineno > best.lineno:
+                    best = n
+    return best
+
+
+def borrow_defects(ticket_md_path, root=None):
+    """Return the defects in a spec's `borrows:` declarations (AO-013 gap 1).
+
+    Two arms. The first grades every declaration that IS written: the span and
+    the exit lines against `ast`. The second catches the author who writes none —
+    a Design citing a line inside a function with no `borrows:` bullet anywhere
+    is one defect, discharged by `borrows: none — <reason>`.
+
+    Fails open wherever the world, rather than the spec, is the problem: no repo,
+    no Design section, an unresolvable or unparsable file. The remedy for each of
+    those is not something a planning session can act on, and a refusal it cannot
+    clear is a refusal that gets worked around.
+    """
+    root = root or _repo_root()
+    if not root:
+        return []
+    try:
+        text = open(ticket_md_path, encoding="utf-8").read()
+    except OSError:
+        return []
+    design = graded_section(text, "Design")
+    if design is None:
+        return []
+
+    defects, declared = [], 0
+    for block in _blocks(design):
+        m = re.match(r"\s*-\s*\**borrows\**\s*:\s*(.+)", " ".join(block.split()),
+                     re.IGNORECASE | re.DOTALL)
+        if not m:
+            continue
+        declared += 1
+        body = m.group(1)
+        if _BORROW_NONE.match(body):
+            continue
+        spec = _BORROW_SPEC.search(body)
+        if not spec:
+            defects.append(
+                "borrows: declaration is unreadable — write "
+                "`<file>.py:<start>-<end>` `<symbol>` — exits <lines> — <meaning>: %s"
+                % body[:90])
+            continue
+        path, sym = spec.group("path"), spec.group("sym")
+        start, end = int(spec.group("start")), int(spec.group("end"))
+        py = _resolve_py(path, root)
+        if py is None:
+            continue                      # unresolvable/ambiguous: fail open
+        defs = _defs(py)
+        if defs is None:
+            continue
+        nodes = defs.get(sym) or []
+        if len(nodes) != 1:
+            defects.append(
+                "borrows: %s names `%s`, which %s in %s — qualify it as "
+                "`Class.method`" % (path, sym,
+                                    "matches %d functions" % len(nodes) if nodes
+                                    else "no function matches", path))
+            continue
+        node = nodes[0]
+        if (start, end) != (node.lineno, node.end_lineno):
+            # Say which of the two it is. A span that starts right and ends early
+            # is a partial read, which is the failure this exists for; a span
+            # that matches neither end is a stale citation, which a diff landing
+            # above the function produces on its own. Reporting both as "stops
+            # short" would misdescribe the second every time.
+            short = start == node.lineno and end < node.end_lineno
+            defects.append(
+                "borrows: `%s` in %s is %d-%d, not %d-%d — %s"
+                % (sym, path, node.lineno, node.end_lineno, start, end,
+                   "the declaration stops %d line%s short of the end, so the "
+                   "function was not read to it"
+                   % (node.end_lineno - end,
+                      "" if node.end_lineno - end == 1 else "s")
+                   if short else
+                   "the declared span is not this function's"))
+        raw = spec.group("exits").lower()
+        got = set() if raw.startswith("none") else {
+            int(x) for x in re.findall(r"\d+", raw)}
+        want = set(_direct_returns(node))
+        if got != want:
+            defects.append(
+                "borrows: `%s` in %s returns at %s — declared %s. Every exit is "
+                "read, or the value's meaning is only half known"
+                % (sym, path,
+                   ", ".join(str(x) for x in sorted(want)) or "no line (none)",
+                   ", ".join(str(x) for x in sorted(got)) or "none"))
+
+    if declared:
+        return defects
+
+    inside = []
+    for m in _PY_CITATION.finditer(design):
+        py = _resolve_py(m.group(1), root)
+        if py is None:
+            continue
+        defs = _defs(py)
+        if defs is None:
+            continue
+        node = _enclosing_def(defs, int(m.group(2)))
+        if node is not None and m.group(0) not in inside:
+            inside.append(m.group(0))
+    if inside:
+        defects.append(
+            "the Design cites code inside a function %d time%s (%s) and declares "
+            "no `borrows:` line. Declare what the design depends on, or write "
+            "`borrows: none — <reason>`"
+            % (len(inside), "" if len(inside) == 1 else "s",
+               ", ".join(inside[:4])))
+    return defects
+
+
+# ── AO-013 1f: the two new refusals are PLAN-LANE ONLY ───────────────────────
+# Not a softening. A `borrows:` declaration describes the code as it was BEFORE
+# the diff, so the moment the build lands the spans legitimately move, and
+# refusing at `/adt-release-check` would fail a correct ticket for doing its job.
+# Verified on this ticket: its four `adt_dod.py` declarations all read stale
+# against the tree that implements them.
+#
+# It also leaves every ticket already in flight alone — AO-006 cites 15 lines
+# inside functions, declares no borrows, and calls `--gate` again at release.
+#
+# The lane comes from the FOLDER, not from `stage:`. The render already treats
+# the folder as the truth (§D2) and `stage:` can lag it by a tick.
+_PLAN_LANES = ("ideas", "planned")
+
+
+def in_plan_lane(ticket_md_path):
+    """True when the ticket file sits in `ideas/` or `planned/`."""
+    return os.path.basename(os.path.dirname(
+        os.path.abspath(ticket_md_path))) in _PLAN_LANES
+
+
+def authoring_defects(ticket_md_path, root=None):
+    """Every authoring defect in a spec, as [(code, message)] (AO-013 1e).
+
+    The same checks `--gate` refuses on, minus the ones about a recorded review,
+    so this can run at step 4 of `commands/plan.md` — BEFORE the first reviewer
+    is dispatched. That ordering is the point: each of these cost a full review
+    round on AO-006, and a reviewer's judgement spent on a string comparison is
+    the most expensive way to find one.
+    """
+    out = [("PROSE", "uncheckable done_evidence entry (prose): %s" % e)
+           for e in unsupported(ticket_md_path)]
+    out += [("DEPS", d) for d in dependency_defects(ticket_md_path)]
+    out += [("CAVEAT", "[%s] %s" % (sec, snip))
+            for sec, snip in unattached_caveats(ticket_md_path)]
+    out += [("BORROW", d) for d in borrow_defects(ticket_md_path, root=root)]
+    out += [("REOPENED",
+             "%s round %s rested on %s staying unmodified; the spec has moved "
+             "since and still edits that file — send the dependency back to the "
+             "reviewer" % (gate, rnd, item))
+            for gate, rnd, item in reopened_dependencies(ticket_md_path)]
+    return out
+
+
 def is_all_checkable(ticket_md_path):
     """True iff the DoD is non-empty AND every entry is machine-checkable.
 
@@ -1007,6 +1293,15 @@ def _cli(argv):
                          "resolve under it. must_run conditions execute in the "
                          "git toplevel of the directory the grader is invoked "
                          "from. The report names both.")
+    ap.add_argument("--check-authoring", action="store_true",
+                    help="report every authoring defect a reviewer should never "
+                         "see (prose conditions, dependency defects, unattached "
+                         "caveats, borrows: declarations that do not match the "
+                         "source, and a recorded dependency the spec has since "
+                         "moved past). Exits 1 on any finding. Run it at plan "
+                         "time, before dispatching a counter-check: it reads the "
+                         "code as it is NOW, so after a build lands its own "
+                         "diff the borrow spans it grades are stale by design")
     ap.add_argument("--snapshot-dod", action="store_true",
                     help="append a dod_snapshot row (the done_evidence digest an "
                          "amendment count is derived from)")
@@ -1020,9 +1315,35 @@ def _cli(argv):
             return 0
         derive_gate_effects(args.ticket_md, args.plan_calibration)
         snapshot_dod(args.ticket_md)
-        print("RECORDED\t%s round %s verdict %s hash %s"
-              % (row["gate"], row["round"], row["verdict"] or "(none)", row["hash"]))
+        print("RECORDED\t%s round %s verdict %s hash %s%s"
+              % (row["gate"], row["round"], row["verdict"] or "(none)",
+                 row["hash"],
+                 " rests_on %s" % row["rests_on"] if row.get("rests_on") else ""))
+        # AO-013 1c/1h. Both of these are printed AFTER the row is written, so a
+        # recording is never lost to a diagnostic, and both are reports rather
+        # than refusals: the first is about the reviewer's prose, which the author
+        # cannot edit, and the second is a question for the human.
+        phrase = undeclared_justification(args.ticket_md, args.record_verdict)
+        if phrase:
+            print("NOTE\t%s passed something on the grounds that %r, and "
+                  "declared no dependency. Ask the reviewer for a "
+                  "`**Depends-on-unmodified:** <file>:<symbol>` line, or nothing "
+                  "will reopen that verdict when the spec touches that code."
+                  % (args.record_verdict, phrase), file=sys.stderr)
+        line = divergence_escalation(args.ticket_md)
+        if line:
+            print(line)
         return 0
+
+    if args.check_authoring:
+        # Reports, and exits 1 so the finding cannot be scrolled past. No
+        # --devteam: nothing here resolves a rendered artifact.
+        found = authoring_defects(args.ticket_md)
+        for code, msg in found:
+            print("%-8s %s" % (code, msg))
+        if not found:
+            print("CLEAN\tno authoring defects in %s" % args.ticket_md)
+        return 1 if found else 0
 
     if args.dry_run:
         # Reports; never refuses. This runs at PLAN time, where red is the
@@ -1077,6 +1398,31 @@ def _cli(argv):
                   % ("" if len(loose) == 1 else "s",
                      "; ".join("[%s] %s" % (sec, snip) for sec, snip in loose)))
             return 1
+        # AO-013 1f — the two authoring defects that are about the PLAN's reading
+        # of existing code. Plan-lane only; see in_plan_lane() for why that is
+        # correctness rather than leniency.
+        borrows = borrow_defects(args.ticket_md)
+        reopened = reopened_dependencies(args.ticket_md)
+        if in_plan_lane(args.ticket_md):
+            if borrows:
+                print("REFUSE\tborrows: defect%s — a value the Design depends on "
+                      "was not traced to the end of the function that produces "
+                      "it: %s"
+                      % ("" if len(borrows) == 1 else "s", "; ".join(borrows)))
+                return 1
+            if reopened:
+                print("REFUSE\ta recorded verdict rested on code the spec has "
+                      "since moved past, so it no longer covers this text: %s. "
+                      "Send the dependency back to the reviewer and record the "
+                      "new verdict."
+                      % "; ".join("%s round %s rested on %s" % r for r in reopened))
+                return 1
+        elif borrows or reopened:
+            print("NOTE\t%d borrows: defect(s) and %d reopened dependenc%s, "
+                  "recorded and not enforced: this ticket is past the plan lanes, "
+                  "where a borrow span describes code the diff has since moved."
+                  % (len(borrows), len(reopened),
+                     "y" if len(reopened) == 1 else "ies"), file=sys.stderr)
         # ADT-114 mech #1 — the DoD must have been counter-checked for COVERAGE by
         # something that did not author it. Checkable != complete.
         cverdict, grandfathered = coverage_review(args.ticket_md)
@@ -1201,6 +1547,36 @@ def _last_block(text, header_re):
     return text[last.end():] if last else None
 
 
+def graded_section(text, name):
+    """The body of `### <name>` — or None when the ticket has no such section.
+
+    AO-013 1g. The matcher used to be `^### <name>$` exactly, and the plan
+    template writes `### Sub-steps  (DERIVED from Design + Impact — not
+    invented)`. So the sub-steps were in GRADED_SECTIONS and never in the graded
+    text: 86 occurrences across 12 distinct heading strings in the local corpus,
+    every one skipped. A round that changed only the work-set moved no hash, and
+    `caused_edit` could not see it.
+
+    The suffix is matched as a PARENTHETICAL, not as a prefix. A prefix match
+    would swallow `Design notes`, `Design-doc section`, `Design review` and
+    `Design — the SIMPLIFICATION`, and `_last_block` takes the LAST match — so
+    the hash would silently grade a UI-review note as the Design.
+
+    The section ends at the next `###` OR the next `##`, matching
+    `_body_sections`. That second half is load-bearing rather than tidiness:
+    without it a ticket whose last graded section is followed by `## Build log`
+    grades its build log too, so every appended build-log line would move the
+    hash and reopen every declared dependency.
+    """
+    rx = re.compile(r"^###\s+" + re.escape(name) + r"\s*(?:\(.*\))?\s*$",
+                    re.MULTILINE)
+    tail = _last_block(text, rx)
+    if tail is None:
+        return None
+    nxt = re.search(r"^##", tail, re.MULTILINE)
+    return tail[:nxt.start()] if nxt else tail
+
+
 def _canonical_graded_text(ticket_md_path):
     """The exact text `caused_edit` is sensitive to, whitespace-normalised.
 
@@ -1213,12 +1589,9 @@ def _canonical_graded_text(ticket_md_path):
         return ""
     chunks = []
     for name in GRADED_SECTIONS:
-        rx = re.compile(r"^###\s+" + re.escape(name) + r"\s*$", re.MULTILINE)
-        tail = _last_block(text, rx)
-        if tail is None:
+        body = graded_section(text, name)
+        if body is None:
             continue
-        nxt = re.search(r"^###\s+", tail, re.MULTILINE)
-        body = tail[:nxt.start()] if nxt else tail
         chunks.append(name + "\n" + " ".join(body.split()))
     for ev in parse_done_evidence(ticket_md_path):
         chunks.append(" ".join(str(sorted(ev.items())).split()))
@@ -1285,6 +1658,146 @@ def _gate_verdict(ticket_md_path, gate):
 
 NEGATIVE_VERDICTS = {"GAP", "UNKNOWN", "FLAWED"}
 
+# ── AO-013 gap 2: a verdict records what it rests on, so it can be reopened ──
+# AO-006 round 3: coverage passed "a rate-limited tick correctly goes red"
+# WITHOUT a condition, on the stated grounds that it was a property of existing,
+# unmodified code. True when written. Round 6's design modified exactly that
+# code, and nothing reopened the verdict — it survived because the operator
+# thought to ask. The row already carried a graded-text hash; it carried no
+# record of what the verdict depended on.
+#
+# So the reviewer declares it, `record_verdict` stores it as `rests_on:`, and a
+# dependency is REOPENED when both halves hold: the graded text has moved since
+# that row was written, and the file it names is still in the current
+# `### Sub-steps`. The second half is what keeps this off a typo in Risks; the
+# first is what keeps it off a spec nobody has touched.
+_RESTS_ON_RE = re.compile(r"^\*\*Depends-on-unmodified:\*\*\s*(.+?)\s*$",
+                          re.MULTILINE)
+# The justification phrases a verdict uses when it passes something ungraded.
+# Conservative, on the same principle as `_CAVEAT_MARKERS`: measured at zero hits
+# across 434 local ticket bodies, so it fires on the declaration form and not on
+# ordinary review prose. Widen it only with an incident to point at.
+_JUSTIFICATION_RE = re.compile(
+    r"existing,?\s+unmodified\s+code"
+    r"|\b(?:code|function|path|behaviour|behavior|logic)\s+"
+    r"(?:is|stays|remains)\s+unmodified\b"
+    r"|\bneeds?\s+no\s+(?:test|condition)\b"
+    r"|\bno\s+(?:test|condition)\s+(?:is\s+)?needed\b"
+    r"|\brequires?\s+no\s+(?:test|condition)\b"
+    r"|\bnot\s+chang(?:ing|ed)\s+(?:in|by)\s+this\s+(?:ticket|diff|change)\b",
+    re.IGNORECASE)
+
+
+def _gate_block(ticket_md_path, gate):
+    """The text of a gate's LAST verdict block, or None."""
+    header = _GATE_HEADERS.get(gate)
+    if not header:
+        return None
+    try:
+        text = open(ticket_md_path, encoding="utf-8").read()
+    except OSError:
+        return None
+    rx = re.compile(r"^###\s+" + re.escape(header) + r"\s*$", re.MULTILINE)
+    tail = _last_block(text, rx)
+    if tail is None:
+        return None
+    nxt = re.search(r"^##", tail, re.MULTILINE)
+    return tail[:nxt.start()] if nxt else tail
+
+
+def declared_dependency(ticket_md_path, gate):
+    """The `**Depends-on-unmodified:**` list in a gate's last block, or ''.
+
+    Parsed out of the block for the same reason the verdict is: an agent that
+    types it into the tool could type something the reviewer never said.
+    """
+    block = _gate_block(ticket_md_path, gate)
+    if not block:
+        return ""
+    m = _RESTS_ON_RE.search(block)
+    if not m or m.group(1).strip().lower() in ("none", "(none)", "n/a"):
+        return ""
+    return " ".join(m.group(1).replace(",", " ").split())
+
+
+def undeclared_justification(ticket_md_path, gate):
+    """The justification phrase a gate block uses with nothing declared, or None.
+
+    The backstop for the reviewer simply omitting the line. It reports; it never
+    refuses — the reviewer's prose is not something the author can edit.
+    """
+    block = _gate_block(ticket_md_path, gate)
+    if not block or declared_dependency(ticket_md_path, gate):
+        return None
+    m = _JUSTIFICATION_RE.search(block)
+    return m.group(0) if m else None
+
+
+def reopened_dependencies(ticket_md_path):
+    """[(gate, round, "<file>:<symbol>")] for every dependency now in doubt."""
+    if not _canonical_graded_text(ticket_md_path):
+        # An unreadable ticket hashes as the sha of "", which would compare
+        # unequal to every stored hash and reopen everything. Nothing to compare
+        # is not the same as something that moved.
+        return []
+    try:
+        text = open(ticket_md_path, encoding="utf-8").read()
+    except OSError:
+        return []
+    sub = graded_section(text, "Sub-steps") or ""
+    now = graded_text_hash(ticket_md_path)
+    rows = _read_frontmatter_list(ticket_md_path, "gate_effects")
+    out = []
+    for gate in GATES:
+        mine = sorted((r for r in rows if r.get("kind") == "record"
+                       and r.get("gate") == gate),
+                      key=lambda r: _as_int(r.get("round")))
+        if not mine:
+            continue
+        last = mine[-1]
+        # Only the LAST row per gate. An earlier row's dependency was either
+        # re-stated by the round that followed it or dropped on purpose, and
+        # reopening a superseded verdict asks for a review of text nobody holds.
+        if last.get("hash") == now:
+            continue
+        for item in (last.get("rests_on") or "").replace(",", " ").split():
+            if os.path.basename(item.split(":")[0]) in sub:
+                out.append((gate, _as_int(last.get("round")), item))
+    return out
+
+
+def divergence_escalation(ticket_md_path):
+    """The escalation line when the DESIGN is diverging, or None (AO-013 gap 4).
+
+    Two consecutive negative plan-quality verdicts, which is a spec killing
+    designs rather than refining one. AO-006 recorded FLAWED, FLAWED, FLAWED,
+    SOUND; the operator escalated at round three on their own judgement, and the
+    playbook asked for nothing.
+
+    Plan-quality ONLY. A coverage GAP says the grading is incomplete, which is
+    what the tier's own round limits already govern — escalating on two of those
+    would contradict the three rounds `full` allows. A plan-quality FLAWED says
+    the design is wrong, and two in a row is a different state from one.
+    """
+    rows = _read_frontmatter_list(ticket_md_path, "gate_effects")
+    mine = sorted((r for r in rows if r.get("kind") == "record"
+                   and r.get("gate") == "plan-quality"),
+                  key=lambda r: _as_int(r.get("round")))
+    if len(mine) < 2:
+        return None
+    pair = [(r.get("verdict") or "").upper() for r in mine[-2:]]
+    # An empty verdict means a block with nothing parseable in it — an
+    # interrupted reviewer, not a judgement. It is not negative, so it cannot
+    # escalate on its own.
+    if not all(v in NEGATIVE_VERDICTS for v in pair):
+        return None
+    return ("ESCALATE\t%s then %s on plan-quality, rounds %s and %s. Two "
+            "negative verdicts in a row is a design being replaced rather than "
+            "refined — take it to the human with the findings named, and do not "
+            "open another round (commands/plan.md step 0b)."
+            % (pair[0], pair[1], _as_int(mine[-2].get("round")),
+               _as_int(mine[-1].get("round"))))
+
 
 def record_verdict(ticket_md_path, gate):
     """Append one `kind: record` row for `gate`. Returns the row, or None.
@@ -1304,6 +1817,12 @@ def record_verdict(ticket_md_path, gate):
               if r.get("kind") == "record" and r.get("gate") == gate]
     row = {"kind": "record", "gate": gate, "round": len(rounds) + 1,
            "verdict": verdict or "", "hash": graded_text_hash(ticket_md_path)}
+    # AO-013 1c. Only when the reviewer declared one: an absent key is the
+    # ordinary case, and writing `rests_on: ` on every row would make an empty
+    # string indistinguishable from a declaration nobody made.
+    rests = declared_dependency(ticket_md_path, gate)
+    if rests:
+        row["rests_on"] = rests
     rows.append(row)
     _write_frontmatter_list(ticket_md_path, "gate_effects", rows)
     return row

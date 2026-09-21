@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.2.0",
-  "source_commit": "3faedb35a721fe6d754a92c5a1df33cb678fbef9",
+  "source_commit": "0cafdb154f716de4d02643c382db806d8f9b077f",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -14,7 +14,7 @@
     },
     {
       "path": "agents/adt-dod-coverage-reviewer.md",
-      "sha256": "4b8c338e11ebcb6c9cc49eea893ecf8430a4ae4b30203775cb32472fd9ab001a"
+      "sha256": "a0a7aae4e3d8e143021ca923f6cbc61913161228b413df166313773d74c2017c"
     },
     {
       "path": "agents/adt-forensic-investigator.md",
@@ -58,7 +58,7 @@
     },
     {
       "path": "commands/adt-plan.md",
-      "sha256": "9f6e2f6bcf717f2bfa6aafa857e38086ae22d457d2f1a9d6304b8150c7434df4"
+      "sha256": "3ffaaa668ef45cdb22160b979810ff57fd4d22ff237720ffe59fda81af7c8484"
     },
     {
       "path": "commands/adt-qa-run.md",
@@ -114,7 +114,7 @@
     },
     {
       "path": "hooks/adt-phrase-linter.sh",
-      "sha256": "a3d7dd742829e839e6e460d68cb8269ecccec57970f95f19d812de07924c3b8c"
+      "sha256": "0a295fe8b279a0570404486a7eb94445b73cecef9c3568966216124abe513c3e"
     },
     {
       "path": "hooks/adt-reattribute.sh",
@@ -162,7 +162,7 @@
     },
     {
       "path": "rules/working-style.md",
-      "sha256": "005c4f593b324e534aa03e3e335094d3b252a0475395b88e35549fb8105946b4"
+      "sha256": "73ebeefd0f74bdf17004159461948a299b1fc34c377c6b30e8a5ff07dca07680"
     },
     {
       "path": "skills/adt-diagnose/SKILL.md",
@@ -178,7 +178,7 @@
     },
     {
       "path": "tools/adt_dod.py",
-      "sha256": "4df56b9a04b604e428ed2362816fee2eca9dbb0e0f5da1c4709fbc77c26d85ea"
+      "sha256": "e6e3e9954f1caaa56fac6a35e4b68089f0d60a7acd69dedc1ea2c1240099d7a0"
     },
     {
       "path": "tools/plan-quality-calibration.md",

@@ -33,6 +33,21 @@ against. Make it checkable here, because no later lane can.
    and any design doc. You cannot design a change without knowing the current
    shape.
 
+   **Read to the end of any function whose value you are going to depend on, and
+   declare it with a borrows: line naming the whole function and every exit line.**
+   AO-006 replaced four designs and three failed the same way: a value produced
+   inside `adt_watch.py`'s tick loop was reused to mean something it does not
+   mean at the source. `_backoff_due`'s eager `return 0.0` sat four lines below
+   code the spec had already quoted. Reading the function to its end was the
+   whole of the fix each time.
+
+   A borrow is a value whose MEANING the design depends on. A function this diff
+   edits is a sub-step, not a borrow. `adt_dod.py --check-authoring` grades every
+   declaration against `ast` (Python only) and refuses a Design that cites a line
+   inside a function while declaring nothing — discharge that with
+   `borrows: none — <reason>` where the citation names a line you are changing
+   rather than a value you are trusting.
+
 2. **Write the spec** into the backlog file's `## Plan (PM)` section, top to
    bottom: design, then impact, then DoD, then sub-steps.
 
@@ -50,6 +65,11 @@ If this is hard to state, the brief isn't ready — /adt-block.>
 - **Why this approach:** the alternatives and why they lost. Lead with the
   simplest thing that could work and say what forces more. "Simplest, nothing
   forces more" is a strong design — record it as one.
+- **borrows:** one line per existing value the design depends on, as
+  `` `<file>.py:<start>-<end>` `<symbol>` — exits <lines> — <what it means> ``.
+  The span is the function's whole span and the exit lines are every `return`
+  inside it, both graded against the source. `borrows: none — <reason>` when the
+  design borrows nothing.
 - **Key decisions:** any choice a reader would question, with its reason. Worth
   re-reading in six months → also `/adt-decide`.
 
@@ -256,6 +276,12 @@ done_evidence:
         `pytest "<file>::<name>" -q`, which exits 4 and prints `no tests ran`
         when the name is absent. Both forms dry-run identically before the file
         exists, so the dry-run cannot tell them apart (AO-007).
+        **In a `unittest.TestCase` file the node id needs the class:**
+        `<file>::<Class>::<name>`. Without it pytest exits 4 for "not found",
+        the same exit as a test nobody has written — so the condition looks
+        correctly authored at plan time and can never be satisfied (AO-013,
+        caught on this rule's own ticket). Collect the ids with
+        `pytest <file> --collect-only -q` rather than composing them by hand.
     10. **A `grep -qF` literal the build has yet to write must be kept on ONE
         line.** `grep -F` matches within a line, so a literal that the build
         wraps at 80 columns straddles a newline and the condition goes red
@@ -300,7 +326,7 @@ done_evidence:
    - **Mechanical checks. Run these YOURSELF before spawning any reviewer.**
      The counter-checks below are the most expensive step in this lane, which is
      also why `commands/build.md` does not grade the DoD after every sub-step.
-     Each gap these three checks find would otherwise cost a full review round,
+     Each gap these four checks find would otherwise cost a full review round,
      and use the reviewer's judgement on a string comparison:
 
      1. **The Test plan agrees with `done_evidence`.** Every file the Test plan
@@ -310,6 +336,13 @@ done_evidence:
         fail if that sub-step were skipped. A marker that points at a condition
         which checks something else is as bad as no marker.
      3. **Every success criterion is named by at least one sub-step.**
+     4. **`python3 tools/adt_dod.py <ticket.md> --check-authoring` exits 0.** It
+        runs the refusals `--gate` would run later — a prose condition, a
+        dependency defect, an unattached caveat — plus the two that are about
+        this spec's reading of existing code: a `borrows:` declaration that does
+        not match the source, and a recorded verdict whose declared dependency
+        the spec has since moved past. Run it from the tree you are planning
+        against, because a citation resolves against that tree's git toplevel.
 
      A failure here is an authoring defect, and the reviewer should never see
      it. Fix it, then dispatch the reviewer.
@@ -318,6 +351,15 @@ done_evidence:
    **Round limit, by tier:** three rounds on `full`, **one** on
    `fast`/`standard`. If you are still finding gaps after the limit, the problem
    is a question for the human, not a drafting problem: `/adt-block`.
+
+   **A round count is not the only signal, and it is the weaker one.**
+   Two consecutive negative plan-quality verdicts means the design is diverging; stop and ask the human.
+   `--record-verdict plan-quality` prints `ESCALATE` when it records the second
+   one, so this does not depend on anyone keeping count. A spec that kills a
+   design every round is in a different state from one narrowing its findings,
+   and it reaches the human sooner than the tier's limit would take it there.
+   Coverage keeps its own limits: a GAP says the grading is incomplete, not that
+   the design is wrong.
 
    **Set `track:` BEFORE this loop, not when you update the frontmatter in
    step 4 below.** Every gate below reads it, and a tier chosen after the gates
