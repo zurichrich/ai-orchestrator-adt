@@ -71,6 +71,12 @@ BRANCH_PROTECTION: tuple | None = None
 # tools/adt_machines.py wrote them to .adt/state/machines.json. Every value came
 # from a GitHub comment, so every value is escaped. Empty → no footer.
 MACHINES: list = []
+# AO-006: the watcher's published validity window (epoch seconds) and the
+# project name the agent is installed under. None/"" -> the sync pill is not
+# rendered at all. NEVER default the window to 0: the page would read that as
+# long expired and paint a board red that has simply never been stamped.
+HEALTHY_UNTIL: float | None = None
+PROJECT_NAME = ""
 # Matches the watcher's launchd StartInterval (60s). The board is regenerated
 # every tick, so refreshing faster buys a re-read of an unchanged file and
 # refreshing slower leaves the tab behind the cache it mirrors.
@@ -216,7 +222,7 @@ def configure(project_root, *, backlog_root=".adt/backlog",
               id_prefix="TIX", stage_tools=None, commands_doc_src=None,
               issues_url="", board_url="", rate_pools=None,
               token_ledger_root="", repo_name="", branch_protection=None,
-              machines=None):
+              machines=None, project_name="", healthy_until=None):
     """Rebind module config for a project. Call before render/run.
 
     issues_url / board_url (the cache-first migration): the GitHub backlog repo's issues base
@@ -240,13 +246,19 @@ def configure(project_root, *, backlog_root=".adt/backlog",
     machines (ADT-384): the machine reports from .adt/state/machines.json, for
     the page footer. None/empty → no footer.
 
+    project_name / healthy_until (AO-006): the project the watcher agent is
+    installed under, and the epoch until which the pass that rendered this page
+    vouches for it. The page compares the second against the viewer's clock to
+    colour the header's sync pill. Either missing → no pill, because a board
+    that cannot say whether it is live must not imply that it is.
+
     token_ledger_root: the CODE checkout that owns the gitignored token ledger,
     when REPO is NOT a code tree (the cache dir under adt_watch). The ledger is
     resolved from here instead of REPO so the renderer reads the same file the
     adt-token-log hook writes. Empty → resolve from REPO (single-checkout case)."""
     global REPO, BL, REPO_URL, ID_PREFIX, STAGE_TOOLS, ID_RE, COMMANDS_DOC_SRC
     global ISSUES_URL, BOARD_URL, RATE_POOLS, TOKEN_LEDGER_ROOT, REPO_NAME
-    global BRANCH_PROTECTION, MACHINES
+    global BRANCH_PROTECTION, MACHINES, PROJECT_NAME, HEALTHY_UNTIL
     REPO = Path(project_root).resolve()
     TOKEN_LEDGER_ROOT = token_ledger_root
     BL = REPO / backlog_root
@@ -256,6 +268,8 @@ def configure(project_root, *, backlog_root=".adt/backlog",
     RATE_POOLS = list(rate_pools or [])
     BRANCH_PROTECTION = branch_protection
     MACHINES = list(machines or [])
+    PROJECT_NAME = project_name
+    HEALTHY_UNTIL = healthy_until
     REPO_NAME = repo_name
     ID_PREFIX = id_prefix
     ID_RE = re.compile(r"^" + re.escape(ID_PREFIX) + r"-(\d+)$")
@@ -1974,6 +1988,34 @@ def watcher_commands(slug: str) -> tuple[str, str]:
     return "", ""
 
 
+def _sync_pill() -> str:
+    """The header's sync indicator, or "" when there is nothing truthful to say.
+
+    Renders the published window and the two commands and NOTHING about state.
+    The colour is decided in the browser (HTML_JS syncPill()), because the
+    watcher is the only thing that renders this page: any state written here
+    freezes at its last value the moment the watcher dies, the meta refresh
+    reloads the same bytes, and the pill would stay green forever — the one case
+    this exists to show.
+
+    `hidden` and no state class, so a page with JS off shows nothing rather than
+    something wrong. Omitted entirely when no window has been published or the
+    platform has no supervisor to drive.
+    """
+    if HEALTHY_UNTIL is None or not PROJECT_NAME:
+        return ""
+    stop, start = watcher_commands(watcher_slug(PROJECT_NAME))
+    if not stop or not start:
+        return ""
+    return (
+        '<button type="button" id="board-sync" class="sync-pill" hidden '
+        f'data-healthy-until="{int(HEALTHY_UNTIL)}" '
+        f'data-stop="{html.escape(stop, quote=True)}" '
+        f'data-start="{html.escape(start, quote=True)}">'
+        '<span class="sync-dot"></span><span class="sync-label"></span>'
+        "</button>")
+
+
 def render_html(items: list[Item]) -> str:
     by_bucket: dict[tuple[str, str], list[Item]] = defaultdict(list)
     for it in items:
@@ -2025,6 +2067,11 @@ def render_html(items: list[Item]) -> str:
         # GitHub timestamp; it is ADT's own render time.
         + f' <span class="gen-at">updated at '
           f'{datetime.now().strftime("%Y-%m-%d %H:%M")} by ADT</span>'
+        # AO-006: the pill rides the same baseline, 8px after the timestamp it
+        # qualifies. Inside the h1 so the two wrap together on a narrow screen —
+        # they are one fact, and a stale time with its indicator on another line
+        # is the ambiguity this ticket exists to remove.
+        + _sync_pill()
         + "</h1>",
         '<div class="hdr">'
         + '<p class="meta hdr-left">'

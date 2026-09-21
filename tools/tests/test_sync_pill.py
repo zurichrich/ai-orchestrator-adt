@@ -12,6 +12,7 @@ watcher's own state must survive the extra write.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -228,3 +229,62 @@ def test_watch_fields_untouched_by_stamp(tmp_path, monkeypatch):
         f"the healthy_until write disturbed the watch blob:\n"
         f"  before={before}\n  after ={after}")
     assert adt_watch._health_stamp(cfg) == 1_700_000_000.0 + 360.0
+
+
+# ── 1d: the renderer emits the window and nothing about state ───────────────
+
+def _page(tmp_path, *, healthy_until, project="ai-orchestrator-adt"):
+    (tmp_path / "enhancements" / "ideas").mkdir(parents=True, exist_ok=True)
+    build_kanban.configure(str(tmp_path), project_name=project,
+                           healthy_until=healthy_until)
+    return build_kanban.render_html(build_kanban.load_items())
+
+
+def test_render_independent_of_window(tmp_path, monkeypatch):
+    """Two windows straddling the decision boundary render the same bytes.
+
+    The straddle is what gives this power: two windows on the same side would
+    render identically even from a server-side computation, so the test would
+    pass while the regression it exists to catch was present.
+    """
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    now = 1_700_000_000
+    fresh = _page(tmp_path, healthy_until=now + 3600)      # comfortably valid
+    stale = _page(tmp_path, healthy_until=now - 3600)      # an hour expired
+
+    fresh_n = fresh.replace(str(now + 3600), "EPOCH")
+    stale_n = stale.replace(str(now - 3600), "EPOCH")
+    # The generated-at minute can tick between renders; it is not state.
+    fresh_n = re.sub(r"updated at [\d-]+ [\d:]+", "updated at T", fresh_n)
+    stale_n = re.sub(r"updated at [\d-]+ [\d:]+", "updated at T", stale_n)
+    assert fresh_n == stale_n, (
+        "the page differs by more than the epoch: the renderer is deciding "
+        "state that only the browser may decide")
+    for page in (fresh, stale):
+        assert "sync-on" not in page and "sync-off" not in page, (
+            "a state class was baked into the HTML")
+
+
+def test_rendered_board_carries_the_window(tmp_path, monkeypatch):
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    page = _page(tmp_path, healthy_until=1_700_000_000)
+    assert re.search(r'data-healthy-until="\d{10}"', page)
+    assert 'id="board-sync"' in page and "hidden" in page
+    # The commands are rendered, so the click has something to copy.
+    assert "launchctl bootout" in page and "launchctl bootstrap" in page
+
+
+def test_missing_window_hides_pill(tmp_path, monkeypatch):
+    """No published window -> no button at all, never a window of zero.
+
+    Zero would read as long expired and paint a board red that has simply never
+    been stamped — a first-ever tick, or a state file predating this field.
+    """
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    page = _page(tmp_path, healthy_until=None)
+    assert 'id="board-sync"' not in page
+    assert "data-healthy-until" not in page
+    # And the same when the platform has no supervisor to drive.
+    monkeypatch.setattr(build_kanban.sys, "platform", "win32")
+    page = _page(tmp_path, healthy_until=1_700_000_000)
+    assert 'id="board-sync"' not in page
