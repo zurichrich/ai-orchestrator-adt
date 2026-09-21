@@ -1487,6 +1487,11 @@ h1 { font-size: 18px; margin: 0 0 4px; }
 .cmd-link { color: var(--p1, #4a9); text-decoration: none; font-weight: 600;
   margin-left: 6px; }
 .cmd-link:hover { text-decoration: underline; }
+/* AO-006: .sync-pill::after is a 44px hit area centred on a ~21px pill inside
+   the h1, so it overhangs ~11.5px below it, and .hdr sits 4px under that. Lift
+   these links above it, the same way .card a:not(.title) is lifted above the
+   card's own full-bleed ::after overlay. */
+.hdr-left .cmd-link { position: relative; z-index: 1; }
 .controls { margin: 0 0 16px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
 .filter-group { display: flex; gap: 6px; align-items: center; }
 /* Right cluster: token total + Columns toggle as one unit, pinned to the
@@ -1543,7 +1548,13 @@ h1 { font-size: 18px; margin: 0 0 4px; }
   vertical-align: baseline;
 }
 .sync-pill:hover { background: var(--code-bg); border-color: var(--muted); }
-.sync-pill:focus-visible { outline: 2px solid var(--p1); outline-offset: 2px; }
+.sync-pill:focus-visible {
+  /* --text, not --p1: --p1 is the P1-priority colour used by the priority
+     badges, and reusing it here conflates "priority one" with "has focus". It
+     also measured 2.06:1 against --bg in light mode, under the 3:1 WCAG
+     minimum for a non-text indicator. --text is 17:1 in both themes. */
+  outline: 2px solid var(--text); outline-offset: 2px;
+}
 /* The visible pill is ~21px tall, well under the 44px touch minimum. A
    transparent ::after grows the HIT area without moving anything on the line. */
 .sync-pill::after {
@@ -1568,6 +1579,11 @@ h1 { font-size: 18px; margin: 0 0 4px; }
   color: var(--bug-strong); background: var(--bug); border-color: var(--bug-strong);
 }
 .sync-pill.sync-off .sync-dot { background: var(--bug-strong); }
+/* Hover, per state. The base .sync-pill:hover above ties on specificity with
+   .sync-pill.sync-off and loses to it on source order, so the red pill had no
+   hover feedback at all. These are (0,3,0) and win regardless of order. */
+.sync-pill.sync-on:hover { background: var(--code-bg); border-color: var(--muted); }
+.sync-pill.sync-off:hover { border-color: var(--text); }
 .rate-badge.rate-ok { color: var(--muted); }
 .rate-badge.rate-warn { color: #c77; }
 .rate-badge.rate-crit { color: #d44; }
@@ -1865,6 +1881,14 @@ setTimeout(function () { location.reload(); }, __REFRESH_MS__);
 // needs no network.
 const SYNC_GRACE_LABEL_MS = 2000;
 
+// The shortcut the manual-copy fallback names. Hardcoding the Mac one told
+// every Linux and Windows reader the wrong key, in the branch that fires
+// precisely when nothing else worked.
+function syncCopyShortcut() {
+  const p = (navigator.platform || navigator.userAgent || '');
+  return /Mac|iPhone|iPad|iPod/.test(p) ? 'press \u2318C' : 'press Ctrl+C';
+}
+
 function syncPill() {
   const el = document.getElementById('board-sync');
   if (!el) return;                       // no window published, or no supervisor
@@ -1877,7 +1901,6 @@ function syncPill() {
   el.classList.toggle('sync-off', !live);
   el.querySelector('.sync-label').textContent =
     live ? 'sync on' : (lateMin ? 'sync off \u00b7 ' + lateMin + 'm late' : 'sync off');
-  el.setAttribute('aria-pressed', live ? 'true' : 'false');
   el.setAttribute('aria-label', live
     ? 'Sync is running. Click to copy the command that stops it.'
     : 'Sync has stopped. Click to copy the command that starts it.');
@@ -1893,9 +1916,19 @@ function syncPillCopy(el) {
   const cmd = live ? el.dataset.stop : el.dataset.start;
   const label = el.querySelector('.sync-label');
   const restore = label.textContent;
+  const announce = el.getAttribute('aria-label');
   const done = function (ok) {
-    label.textContent = ok ? 'copied' : 'press \u2318C';
-    setTimeout(function () { label.textContent = restore; }, SYNC_GRACE_LABEL_MS);
+    label.textContent = ok ? 'copied' : syncCopyShortcut();
+    // The button carries an aria-label, so its text content is not read out.
+    // Update the label itself, or the copy result is visual-only.
+    el.setAttribute('aria-label', ok
+      ? 'Command copied to the clipboard.'
+      : 'Could not copy automatically. The command is selected; ' +
+        syncCopyShortcut() + ' to copy it.');
+    setTimeout(function () {
+      label.textContent = restore;
+      el.setAttribute('aria-label', announce);
+    }, SYNC_GRACE_LABEL_MS);
   };
   const fallback = function () {
     const ta = document.createElement('textarea');
@@ -1907,8 +1940,19 @@ function syncPillCopy(el) {
     ta.select();
     let ok = false;
     try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
-    document.body.removeChild(ta);
-    done(ok);
+    if (ok) {
+      document.body.removeChild(ta);
+      done(true);
+      return;
+    }
+    // Copy failed, so the label is about to name a keyboard shortcut. That
+    // instruction is only true while something is still SELECTED — removing the
+    // textarea here strands it on a selection that no longer exists. Leave it
+    // in place, still selected, until the label restores.
+    done(false);
+    setTimeout(function () {
+      if (ta.parentNode) ta.parentNode.removeChild(ta);
+    }, SYNC_GRACE_LABEL_MS);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(cmd).then(function () { done(true); }, fallback);

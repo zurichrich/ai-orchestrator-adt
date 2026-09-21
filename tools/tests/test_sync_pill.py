@@ -331,6 +331,10 @@ const vm = require('vm');
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[2], 'utf8');
 
+let execResult = false;
+let navigatorStub = {};
+const pending = [];
+
 function page(healthyUntil) {
   const label = { textContent: '' };
   const attrs = {};
@@ -347,23 +351,37 @@ function page(healthyUntil) {
     },
     querySelector: sel => (sel === '.sync-label' ? label : null),
     setAttribute: (k, v) => { attrs[k] = v; },
+    getAttribute: k => (k in attrs ? attrs[k] : null),
     title: '',
     hidden: true,
   };
+  const listeners = {};
+  const textareas = [];
   const ctx = {
     document: {
-      addEventListener() {},
+      addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
+      execCommand: () => execResult,
       querySelectorAll: () => [],
       querySelector: () => null,
       getElementById: id => (id === 'board-sync' ? el : null),
-      body: { classList: { toggle() {} }, appendChild() {}, removeChild() {} },
-      createElement: () => ({ style: {}, setAttribute() {}, select() {} }),
+      body: {
+        classList: { toggle() {} },
+        appendChild: n => { n.attached = true; },
+        removeChild: n => { n.attached = false; n.parentNode = null; },
+      },
+      createElement: () => {
+        const ta = { style: {}, setAttribute() {}, select() { ta.selected = true; },
+                     selected: false, attached: false, value: '' };
+        ta.parentNode = { removeChild: n => { n.attached = false; } };
+        textareas.push(ta);
+        return ta;
+      },
     },
     location: { hash: '', reload() {} },
     localStorage: { getItem: () => null, setItem() {} },
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    navigator: {},
-    setTimeout() {},
+    navigator: navigatorStub,
+    setTimeout: fn => { pending.push(fn); },
     JSON: JSON,
     Date: Date,
     Math: Math,
@@ -373,9 +391,18 @@ function page(healthyUntil) {
   ctx.addEventListener = () => {};
   vm.createContext(ctx);
   vm.runInContext(src, ctx);
-  return { on: classes.has('sync-on'), off: classes.has('sync-off'),
-           label: label.textContent, hidden: el.hidden, attrs: attrs,
-           title: el.title };
+  const fire = () => (listeners.click || []).forEach(
+    fn => fn({ target: { closest: sel => (sel === '#board-sync' ? el : null) } }));
+  return {
+    on: classes.has('sync-on'), off: classes.has('sync-off'),
+    label: label.textContent, hidden: el.hidden, attrs: attrs, title: el.title,
+    click: fire,
+    state: () => ({ label: label.textContent, aria: attrs['aria-label'],
+                    textareas: textareas.map(
+                      ta => ({ attached: ta.attached, selected: ta.selected,
+                               value: ta.value })) }),
+    flush: () => { const q = pending.splice(0); q.forEach(fn => fn()); },
+  };
 }
 
 const result = {};
@@ -423,10 +450,12 @@ def test_window_decides_colour(tmp_path):
     # A missing window decides nothing and stays hidden.
     assert out["absent"]["hidden"] is True
     assert not out["absent"]["on"] and not out["absent"]["off"]
-    # State is in words as well as colour.
-    assert out["converged"]["attrs"]["aria-pressed"] == "true"
-    assert out["expired"]["attrs"]["aria-pressed"] == "false"
-    assert out["expired"]["attrs"]["aria-label"]
+    # State is in words as well as colour, and reaches assistive tech through
+    # the label rather than a toggle role the button does not have.
+    on_label = out["converged"]["attrs"]["aria-label"]
+    off_label = out["expired"]["attrs"]["aria-label"]
+    assert on_label and off_label and on_label != off_label
+    assert "aria-pressed" not in out["converged"]["attrs"]
     # The tooltip shows the command the click would copy.
     assert "START-CMD" in out["expired"]["title"]
     assert "STOP-CMD" in out["converged"]["title"]
@@ -509,9 +538,13 @@ def test_pill_markup_is_accessible(tmp_path, monkeypatch):
     assert '<span class="sync-label">' in page
 
     js = build_kanban.HTML_JS
-    # aria-pressed and aria-label are set at decision time, not render time —
-    # the same reason the class is. Both must be there to be set.
-    assert "aria-pressed" in js and "aria-label" in js
+    # aria-label is set at decision time, not render time — the same reason the
+    # class is. NOT aria-pressed: that tells assistive tech "activating this
+    # toggles this button's own state", and clicking only copies a command the
+    # human runs elsewhere. The label states the state AND the real action.
+    assert "aria-label" in js
+    assert "aria-pressed" not in js, (
+        "aria-pressed on a copy-only button promises a toggle it does not do")
     assert "el.hidden = false" in js, "the pill is never revealed"
 
 
@@ -537,3 +570,57 @@ def test_commands_are_attribute_escaped(tmp_path, monkeypatch):
     # One element, not a truncated tag plus loose text.
     assert pill.count("<button") == 1 and pill.count("</button>") == 1
     assert pill.count(">") == pill.count("<")
+
+
+def test_copy_reports_only_what_happened(tmp_path):
+    """The label never claims a copy that did not happen, and the manual
+    instruction is only shown while there is still a selection to act on.
+
+    The failure branch matters more than it looks: the board is a file:// page,
+    where navigator.clipboard is generally unavailable, so the execCommand
+    fallback is the DEFAULT path for most readers rather than an edge case.
+    """
+    out = _run_pill(tmp_path, """
+      const now = Math.floor(Date.now() / 1000);
+
+      // 1. execCommand succeeds -> "copied", textarea cleaned up.
+      execResult = true;
+      navigatorStub = {};
+      const okp = page(now + 300);
+      okp.click();
+      result.ok = okp.state();
+
+      // 2. execCommand fails -> names a shortcut, and the textarea it refers
+      //    to is STILL attached and selected while that instruction is shown.
+      execResult = false;
+      navigatorStub = {};
+      const badp = page(now + 300);
+      badp.click();
+      result.failed = badp.state();
+      badp.flush();                       // the restore timeout fires
+      result.after = badp.state();
+
+      // 3. the shortcut is platform-aware, not hardcoded to the Mac key.
+      execResult = false;
+      navigatorStub = { platform: 'Linux x86_64' };
+      const linux = page(now + 300);
+      linux.click();
+      result.linux = linux.state();
+    """)
+
+    assert out["ok"]["label"] == "copied"
+    assert out["ok"]["aria"] == "Command copied to the clipboard."
+    assert out["ok"]["textareas"][0]["attached"] is False, "textarea left behind"
+
+    # The instruction and the thing it refers to must coexist.
+    assert out["failed"]["label"].startswith("press")
+    assert out["failed"]["textareas"][0]["attached"] is True, (
+        "the shortcut was shown after the selection it names was removed")
+    assert out["failed"]["textareas"][0]["selected"] is True
+    assert "selected" in out["failed"]["aria"]
+    # ...and the textarea is cleaned up once the label restores.
+    assert out["after"]["textareas"][0]["attached"] is False
+    assert out["after"]["label"] == "sync on"
+
+    assert "Ctrl+C" in out["linux"]["label"], out["linux"]["label"]
+    assert "⌘" not in out["linux"]["label"]
