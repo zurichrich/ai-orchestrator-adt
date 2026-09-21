@@ -334,5 +334,414 @@ class DodSnapshotTest(unittest.TestCase):
             self.assertIsNone(adt_dod.snapshot_dod(t), "an unchanged DoD should add no snapshot")
 
 
+# ── AO-013 gap 2: what a verdict rests on, and when it reopens ──────────────
+DEP = ("### DoD-coverage review\n**Verdict:** COVERED\n"
+       "**Depends-on-unmodified:** tools/adt_watch.py:_save_watch_state\n")
+# A block that passes something ungraded and declares nothing: the AO-006
+# round-3 wording, verbatim in shape.
+UNDECLARED = ("### DoD-coverage review\n**Verdict:** COVERED\n"
+              "The Key decision needs no test because it is a property of "
+              "existing, unmodified code.\n")
+
+
+def _lane_ticket(tmp, lane, **kw):
+    """The same ticket, written into a lane folder, since the gate reads the
+    folder rather than `stage:`."""
+    d = os.path.join(tmp, lane)
+    os.makedirs(d, exist_ok=True)
+    src = ticket(tmp, **kw)
+    dst = os.path.join(d, "t.md")
+    os.replace(src, dst)
+    return dst
+
+
+class DeclaredDependencyTest(unittest.TestCase):
+    def test_a_recorded_verdict_carries_its_declared_dependency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            row = adt_dod.record_verdict(t, "coverage")
+            self.assertEqual(row["rests_on"],
+                             "tools/adt_watch.py:_save_watch_state")
+            # and it survives the serializer round trip, which is where an
+            # unlisted dict key silently becomes a string (ADT-090).
+            rows = adt_dod._read_frontmatter_list(t, "gate_effects")
+            self.assertEqual(rows[0]["rests_on"],
+                             "tools/adt_watch.py:_save_watch_state")
+
+    def test_a_verdict_with_no_declaration_stores_no_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=COVERAGE.format(v="COVERED"))
+            self.assertNotIn("rests_on", adt_dod.record_verdict(t, "coverage"))
+
+    def test_a_justification_phrase_with_no_declaration_prints_a_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=UNDECLARED)
+            # The fixture carries both markers, and the earliest one in the text
+            # is what gets named — asserted exactly, so a regex that started
+            # matching something else would not slip through.
+            self.assertIn("needs no test",
+                          adt_dod.undeclared_justification(t, "coverage"))
+            # The other arm, on its own, so both markers are proven rather than
+            # one shadowing the other.
+            only = ticket(tmp, blocks="### DoD-coverage review\n"
+                                      "**Verdict:** COVERED\n"
+                                      "A property of existing, unmodified code.\n")
+            self.assertIn("existing, unmodified code",
+                          adt_dod.undeclared_justification(only, "coverage"))
+            # The STRUCTURAL half: the reviewer's format requires the line on
+            # every block, so a block with no phrase and no line is still a NOTE.
+            plain = ticket(tmp, blocks=COVERAGE.format(v="COVERED"))
+            self.assertIn("no `**Depends-on-unmodified:**` line",
+                          adt_dod.undeclared_justification(plain, "coverage"))
+            r = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+                 t, "--record-verdict", "coverage"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("RECORDED", r.stdout, "the row is written first")
+            self.assertIn("declared no dependency", r.stderr)
+
+    def test_a_declared_dependency_silences_the_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=UNDECLARED.replace(
+                "**Verdict:** COVERED\n",
+                "**Verdict:** COVERED\n**Depends-on-unmodified:** "
+                "tools/adt_watch.py:_save_watch_state\n"))
+            self.assertIsNone(adt_dod.undeclared_justification(t, "coverage"))
+
+    def test_an_unmoved_spec_reopens_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            self.assertEqual(adt_dod.reopened_dependencies(t), [])
+
+    def test_a_moved_spec_reopens_a_dependency_its_sub_steps_still_touch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.reopened_dependencies(t)
+            self.assertEqual(
+                out, [("coverage", 1, "tools/adt_watch.py:_save_watch_state")])
+
+    def test_a_moved_spec_that_stopped_touching_the_file_reopens_nothing(self):
+        """Both halves are required: the text moved, but the sub-steps no longer
+        name that file, so the dependency still holds."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/build_kanban.py")
+            open(t, "w", encoding="utf-8").write(body)
+            self.assertEqual(adt_dod.reopened_dependencies(t), [])
+
+    def test_a_reopened_dependency_refuses_a_planned_ticket(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = _lane_ticket(tmp, "planned", blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py")
+            open(t, "w", encoding="utf-8").write(body)
+            self.assertTrue(adt_dod.in_plan_lane(t))
+            r = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+                 t, "--gate", "--plan-calibration", "/nonexistent.md"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertIn("REFUSE", r.stdout)
+            self.assertIn("moved past", r.stdout)
+
+            # The same ticket in `building/` reports and approves.
+            moved = os.path.join(tmp, "building")
+            os.makedirs(moved)
+            dst = os.path.join(moved, "t.md")
+            os.replace(t, dst)
+            self.assertFalse(adt_dod.in_plan_lane(dst))
+            r2 = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+                 dst, "--gate", "--plan-calibration", "/nonexistent.md"],
+                capture_output=True, text=True)
+            self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
+            self.assertIn("APPROVABLE", r2.stdout)
+            self.assertIn("recorded and not enforced", r2.stderr)
+
+
+    def test_a_later_none_does_not_erase_an_earlier_declaration(self):
+        """AO-006's actual sequence, and the one the last-row rule missed: a
+        declaration, then a delta re-review that rests on nothing and writes
+        `none` as its own template instructs, then the spec starts editing that
+        file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read() + (
+                "### DoD-coverage review\n**Verdict:** COVERED\n"
+                "**Depends-on-unmodified:** none\n")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.reopened_dependencies(t)
+            self.assertEqual(
+                out, [("coverage", 1, "tools/adt_watch.py:_save_watch_state")],
+                "the round-1 declaration still stands; round 2 rested on nothing")
+
+
+    def test_the_newest_of_two_declarations_wins(self):
+        """`declared[-1]`, not `declared[0]`. With one declaring round the two are
+        the same value, so nothing distinguished them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read() + (
+                "### DoD-coverage review\n**Verdict:** COVERED\n"
+                "**Depends-on-unmodified:** tools/build_kanban.py:_render\n")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py and tools/build_kanban.py")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.reopened_dependencies(t)
+            self.assertEqual(out, [("coverage", 2, "tools/build_kanban.py:_render")],
+                             "the newest declaration is the live one")
+
+    def test_the_hash_comes_from_the_newest_row_not_the_declaring_one(self):
+        """Otherwise a `none` round would never register as "someone looked
+        since", and an unchanged spec would reopen on every run."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py")
+            open(t, "w", encoding="utf-8").write(body)
+            self.assertEqual(len(adt_dod.reopened_dependencies(t)), 1,
+                             "the spec moved after the only verdict")
+            # A later round looks at the moved text and rests on nothing. The
+            # question "has anyone looked since?" is now answered yes.
+            body = open(t, encoding="utf-8").read() + (
+                "### DoD-coverage review\n**Verdict:** COVERED\n"
+                "**Depends-on-unmodified:** none\n")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "coverage")
+            self.assertEqual(adt_dod.reopened_dependencies(t), [],
+                             "the newest row saw this text, so nothing is open")
+
+    def test_no_note_on_plan_quality_however_the_block_reads(self):
+        """`rests_on` is coverage-only, and the plan-quality template was never
+        taught to emit the line, so asking for it there warns on correct work."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=QUALITY.format(v="SOUND")
+                       + "It needs no test: existing, unmodified code.\n")
+            r = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+                 t, "--record-verdict", "plan-quality"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("RECORDED", r.stdout)
+            self.assertNotIn("declared no dependency", r.stderr,
+                             "the NOTE belongs to coverage only")
+
+
+class CheckAuthoringCliTest(unittest.TestCase):
+    """`--check-authoring` had no test at all, so two of its decisions could be
+    reverted without anything noticing."""
+
+    def _run(self, path):
+        return subprocess.run(
+            [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+             path, "--check-authoring"], capture_output=True, text=True,
+            cwd=ROOT)
+
+    def _planned(self, tmp, design):
+        d = os.path.join(tmp, "planned")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "t.md")
+        open(p, "w", encoding="utf-8").write(
+            "---\nid: C-1\ntrack: standard\ndone_evidence:\n"
+            "  - must_run: 'true'\n    lane: build\n---\n\n# b\n\n"
+            "## Plan (PM)\n\n### Design\n%s\n\n### Risks\n- none.\n"
+            "### Test plan\n- a test\n### Problem & goal\nx\n"
+            "### Impact / ripple analysis\nnone\n### Sub-steps\n- 1a do it\n"
+            "### DoD-coverage review\n**Verdict:** COVERED\n" % design)
+        return p
+
+    def test_a_skipped_citation_alone_exits_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self._planned(tmp, "- borrows: `tools/absent_module.py:1-6` "
+                                   "`_gone` — exits 4 — the deadline this "
+                                   "design compares the clock against.")
+            r = self._run(p)
+            self.assertIn("SKIPPED", r.stdout)
+            self.assertEqual(r.returncode, 0,
+                             "a citation the checker could not resolve is not a "
+                             "defect in the spec: " + r.stdout)
+
+    def test_a_real_defect_exits_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self._planned(tmp, "- borrows: none")
+            body = open(p, encoding="utf-8").read().replace(
+                "### Risks\n- none.", "### Risks\n- this assumes the marker is set.")
+            open(p, "w", encoding="utf-8").write(body)
+            r = self._run(p)
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertIn("CAVEAT", r.stdout)
+
+    def test_a_missing_ticket_refuses_rather_than_reading_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(os.path.join(tmp, "nope.md"))
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertTrue(r.stdout.startswith("REFUSE\t"), r.stdout)
+            # Not `assertNotIn("CLEAN")`: the refusal's own text explains that a
+            # wrong path WOULD have printed CLEAN, so the word is expected in it.
+            self.assertFalse(r.stdout.startswith("CLEAN"), r.stdout)
+
+
+class UngradedSectionTest(unittest.TestCase):
+    def test_a_plan_missing_some_graded_sections_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            body = open(t, encoding="utf-8").read().replace("### Risks", "### Hazards")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.ungraded_sections(t)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("`### Risks`", out[0][1])
+
+    def test_a_plan_with_no_graded_sections_at_all_is_not_drift(self):
+        """A fast-track plan legitimately has a `## Plan (PM)` and no `###`
+        subsections. Reporting `0 of 6` on every one of those is how a check
+        teaches people to ignore it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            head = open(t, encoding="utf-8").read().split("## Plan (PM)")[0]
+            open(t, "w", encoding="utf-8").write(
+                head + "## Plan (PM)\n\nA one-line fix, no sections.\n")
+            self.assertEqual(adt_dod.ungraded_sections(t), [])
+
+    def test_a_complete_plan_reports_nothing(self):
+        """Dropping the `not missing` arm would report "6 of 6" on every correct
+        ticket, which is the false-positive class this check was fixed for."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(adt_dod.ungraded_sections(ticket(tmp)), [])
+
+    def test_one_missing_section_is_still_reported(self):
+        """The all-but-one boundary: five of six present must still report."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            body = open(t, encoding="utf-8").read().replace(
+                "### Test plan", "### Verification")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.ungraded_sections(t)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("5 of 6", out[0][1])
+
+    def test_one_section_present_is_reported_not_suppressed(self):
+        """The other side of the boundary. Suppression is for a plan with NO
+        graded sections; one present and five missing is drift, and a suppression
+        arm widened by one would swallow it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            head = open(t, encoding="utf-8").read().split("## Plan (PM)")[0]
+            open(t, "w", encoding="utf-8").write(
+                head + "## Plan (PM)\n\n### Design\nthe only section.\n")
+            out = adt_dod.ungraded_sections(t)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("1 of 6", out[0][1])
+
+    def test_a_ticket_with_no_plan_is_not_missing_anything(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            head = open(t, encoding="utf-8").read().split("## Plan (PM)")[0]
+            open(t, "w", encoding="utf-8").write(head)
+            self.assertEqual(adt_dod.ungraded_sections(t), [])
+
+
+class DivergenceTest(unittest.TestCase):
+    def test_two_consecutive_negative_plan_quality_verdicts_print_escalate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=QUALITY.format(v="FLAWED"))
+            adt_dod.record_verdict(t, "plan-quality")
+            self.assertIsNone(adt_dod.divergence_escalation(t),
+                              "one negative verdict is a finding, not divergence")
+            r = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+                 t, "--record-verdict", "plan-quality"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("ESCALATE", r.stdout)
+            self.assertIn("rounds 1 and 2", r.stdout)
+
+    def test_a_negative_then_positive_verdict_is_converging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=QUALITY.format(v="FLAWED"))
+            adt_dod.record_verdict(t, "plan-quality")
+            body = open(t, encoding="utf-8").read() + QUALITY.format(v="SOUND")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "plan-quality")
+            self.assertIsNone(adt_dod.divergence_escalation(t))
+
+    def test_two_coverage_gaps_do_not_escalate(self):
+        """Coverage keeps its tier round limits: a GAP says the grading is
+        incomplete, not that the design is being replaced."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=COVERAGE.format(v="GAP"))
+            adt_dod.record_verdict(t, "coverage")
+            adt_dod.record_verdict(t, "coverage")
+            self.assertIsNone(adt_dod.divergence_escalation(t))
+
+    def test_a_block_with_no_parseable_verdict_cannot_escalate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks="### Plan-quality review\nno verdict here\n")
+            adt_dod.record_verdict(t, "plan-quality")
+            adt_dod.record_verdict(t, "plan-quality")
+            self.assertIsNone(adt_dod.divergence_escalation(t))
+
+
+class GradedHeadingTest(unittest.TestCase):
+    def test_the_graded_hash_covers_a_suffixed_sub_steps_heading(self):
+        """The template writes `### Sub-steps  (DERIVED from ...)`, and the
+        matcher used to require the bare heading, so no sub-step change ever
+        moved the hash."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            body = open(t, encoding="utf-8").read().replace(
+                "### Sub-steps",
+                "### Sub-steps  (DERIVED from Design + Impact — not invented)")
+            open(t, "w", encoding="utf-8").write(body)
+            before = adt_dod.graded_text_hash(t)
+            open(t, "w", encoding="utf-8").write(body.replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — do something else entirely"))
+            self.assertNotEqual(before, adt_dod.graded_text_hash(t))
+
+    def test_a_design_notes_heading_is_not_read_as_the_design(self):
+        """A prefix match would take the LAST `Design*` heading, so a UI-review
+        note would be hashed as the Design."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, design="the real design")
+            body = open(t, encoding="utf-8").read() + (
+                "\n### Design notes\nswatches and tokens\n")
+            open(t, "w", encoding="utf-8").write(body)
+            self.assertIn("the real design", adt_dod.graded_section(body, "Design"))
+            self.assertNotIn("swatches", adt_dod.graded_section(body, "Design"))
+
+    def test_an_appended_build_log_line_does_not_move_the_hash(self):
+        """Otherwise every build-log append reopens every declared dependency."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            before = adt_dod.graded_text_hash(t)
+            open(t, "a", encoding="utf-8").write(
+                "\n## Build log (Dev)\n- 1a done. Tests: PASS.\n")
+            self.assertEqual(before, adt_dod.graded_text_hash(t))
+
+
 if __name__ == "__main__":
     unittest.main()

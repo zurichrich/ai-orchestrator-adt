@@ -163,3 +163,181 @@ def test_caveats_outside_the_scanned_sections_are_ignored(tmp_path):
     goal is not one of them."""
     body = "### Problem & goal\n- The current code assumes a single machine.\n"
     assert adt_dod.unattached_caveats(_t(tmp_path, CLEAN, body)) == []
+
+
+# ── AO-013 gap 1: borrows: declarations are graded against the source ──────
+# The fixture is a real module written to a real temp repo, because the whole
+# mechanism is "what does `ast` say the function is" — a mocked parse would test
+# the assertion and not the thing it asserts.
+_MODULE = '''\
+def _backoff_due(now, quiet):
+    """Two exits, and the first one is a sentinel."""
+    if quiet < 3:
+        return 0.0
+    step = 60 * (quiet - 2)
+    return now + min(step, 300)
+
+
+def _save_state(cfg, quiet):
+    cfg["quiet"] = quiet
+
+
+def _with_nested(rows):
+    """One exit of its own; the inner return belongs to the inner function."""
+    def _key(row):
+        return row["at"]
+    return sorted(rows, key=_key)
+'''
+
+
+def _repo(tmp_path, design, git=False):
+    """A tree holding the module, plus a ticket in `planned/` citing it.
+
+    `git=True` only for the test that drives the CLI, which resolves the repo
+    root itself; every other test passes `root=` directly, and `git init` is 20ms
+    a piece.
+    """
+    repo = tmp_path / "repo"
+    (repo / "tools").mkdir(parents=True)
+    (repo / "tools" / "watch_fixture.py").write_text(_MODULE)
+    if git:
+        import subprocess
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    cache = tmp_path / "cache" / "planned"
+    cache.mkdir(parents=True)
+    md = cache / "ticket.md"
+    md.write_text("---\nid: B-1\ntrack: standard\ndone_evidence:\n"
+                  "  - must_run: 'true'\n    lane: build\n---\n\n# body\n"
+                  "### Design\n%s\n\n### Risks\n- none.\n%s" % (design, REVIEW))
+    return str(md), str(repo)
+
+
+def _msgs(out, code="BORROW"):
+    return [m for c, m in out if c == code]
+
+
+def test_a_borrow_stopping_short_of_the_function_end_is_a_defect(tmp_path):
+    """The AO-006 round-3 shape: the span ends before the sentinel return."""
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-4` "
+                               "`_backoff_due` — exits 4 — 0.0 is a sentinel "
+                               "meaning run eagerly, not a timestamp.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    got = _msgs(out)
+    assert any("is 1-6, not 1-4" in d and "2 lines short" in d for d in got), out
+    assert any("returns at 4, 6" in d and "declared 4" in d for d in got), out
+
+
+def test_a_borrow_read_to_the_end_is_clean(tmp_path):
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-6` "
+                               "`_backoff_due` — exits 4, 6 — 0.0 at 4 is a "
+                               "sentinel meaning run eagerly, not a time.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_a_function_with_no_returns_declares_none(tmp_path):
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:9-10` "
+                               "`_save_state` — exits none — it writes the "
+                               "whole dict and returns nothing at all.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_a_return_inside_a_nested_def_is_not_this_functions_exit(tmp_path):
+    """`_with_nested` is 13-17 with ONE exit of its own, at 17. The inner
+    `return` at 15 is `_key`'s. Counting it would fail a correct declaration,
+    and nothing else in the suite has a nested function to notice."""
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:13-17` "
+                               "`_with_nested` — exits 17 — the rows in the "
+                               "order the caller depends on.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_the_nested_functions_own_exit_is_graded_against_the_nested_function(tmp_path):
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:15-16` "
+                               "`_key` — exits 16 — the sort key, which the "
+                               "outer function does not expose.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_a_design_citing_code_inside_a_function_with_no_borrow_is_a_defect(tmp_path):
+    md, repo = _repo(tmp_path, "- the deadline comes from "
+                               "`tools/watch_fixture.py:5`, which is a time.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    assert len(out) == 1 and "declares no `borrows:` line" in out[0][1], out
+
+
+def test_a_citation_outside_any_function_needs_no_borrow(tmp_path):
+    """Line 7 is blank, between the two defs: nothing is being borrowed."""
+    md, repo = _repo(tmp_path, "- the module at `tools/watch_fixture.py:7`.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_borrows_none_discharges_the_no_declaration_defect(tmp_path):
+    md, repo = _repo(tmp_path, "- the deadline comes from "
+                               "`tools/watch_fixture.py:5`.\n"
+                               "- borrows: none — the citation names the line "
+                               "this diff edits, not a value it depends on.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_a_borrow_naming_no_such_function_is_a_defect(tmp_path):
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-6` "
+                               "`_no_such_helper` — exits 4, 6 — the deadline "
+                               "this design compares the clock against.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    assert len(out) == 1 and "no function matches" in out[0][1], out
+
+
+def test_an_unresolvable_citation_is_reported_and_never_refused(tmp_path):
+    """A file the tree does not hold is not something a planning session can fix
+    by editing the spec. It is reported as SKIPPED so the silence is visible, and
+    `--gate` refuses only on BORROW."""
+    md, repo = _repo(tmp_path, "- borrows: `tools/absent.py:1-6` `_gone` — "
+                               "exits 4 — the deadline this design compares "
+                               "the clock against.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    assert _msgs(out) == [], out
+    assert len(_msgs(out, "SKIPPED")) == 1, out
+
+
+def test_a_declaration_with_no_meaning_is_a_defect(tmp_path):
+    """The span and the exits are both computable from `ast`. A declaration
+    carrying only those is one an agent can satisfy without reading anything."""
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-6` "
+                               "`_backoff_due` — exits 4, 6 — a time.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    assert len(out) == 1 and "what it means" in out[0][1], out
+
+
+def test_a_borrow_defect_refuses_in_planned_and_only_notes_in_building(tmp_path):
+    """The lane scoping, both directions, through the CLI.
+
+    `--gate` resolves a citation against the git toplevel of the directory it is
+    invoked from, so the subprocess runs in the fixture repo — the same way a
+    planning session runs it in the tree it is planning against.
+    """
+    import shutil
+    import subprocess
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-4` "
+                               "`_backoff_due` — exits 4 — the deadline this "
+                               "design compares the clock against.", git=True)
+    dod = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(adt_dod.__file__))), "tools", "adt_dod.py")
+    args = [sys.executable, dod, "--gate"] + _NO_PLAN_GATE
+
+    r = subprocess.run(args[:2] + [md] + args[2:], cwd=repo,
+                       capture_output=True, text=True)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "REFUSE" in r.stdout and "not traced to the end" in r.stdout, r.stdout
+
+    # The same ticket one lane on: reported on stderr, and approvable. A borrow
+    # span describes the code BEFORE the diff, so once the build lands its own
+    # change the span is stale by design and a refusal here would be wrong.
+    building = tmp_path / "cache" / "building"
+    building.mkdir(parents=True)
+    moved = str(building / "ticket.md")
+    shutil.move(md, moved)
+    r2 = subprocess.run(args[:2] + [moved] + args[2:], cwd=repo,
+                        capture_output=True, text=True)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "APPROVABLE" in r2.stdout, r2.stdout
+    assert "recorded and not enforced" in r2.stderr, r2.stderr

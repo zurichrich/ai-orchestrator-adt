@@ -240,6 +240,31 @@ examples below the rules.
     those are fixed strings a hook greps for, while these are habits of
     construction that nothing greps — you have to catch them by reading.
 
+13. **Cite the command behind every count and every completeness claim.**
+    A number or a completeness word in a report is a claim, and the reader cannot
+    spot-check it. Write `grep -c '^cost_usd:' tasks/done/*.md → 2 of 31`, not
+    "two tickets carry a cost". "All nine markers are fine", "the only two
+    remaining mentions", "every call site updated" — each of those needs the
+    command that produced it, run in the turn that makes the claim.
+
+    The failure this counters is a command narrower than the sentence reporting
+    it. In one AO-006 session, "9 distinct markers, all ok" came from a grep that
+    stopped at newlines, and "the only two remaining mentions" from a
+    three-phrase grep that never counted mentions. Both were wrong, and a
+    reviewer found both. Neither was a lie: the author read a list and counted it
+    by eye, which is the habit, not the grep.
+
+    So enumerate and count, rather than grepping for the cases you expect to
+    find. If you have not run something that counts, say what the number would
+    take and go and get it. `/adt-brief` has required this of research notes for
+    a while, scoped to `rnd-*` files; this is the same standard for every report.
+    `adt-phrase-linter.sh` check (e) flags a sentence carrying both a quantity
+    and a completeness word when nothing in the turn counted anything.
+
+    This is #10 (never guess; act only on verified data) applied to numbers. #10
+    covers whether you verified; this covers whether what you ran can support the
+    sentence you wrote.
+
 ## Banned phrases (recovery-narration tells)
 
 Do not use these unless the literal claim is true and earned:
