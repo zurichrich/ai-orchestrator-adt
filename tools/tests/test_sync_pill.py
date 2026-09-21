@@ -87,3 +87,144 @@ def test_commands_both_platforms(monkeypatch):
     # No slug is the same case.
     monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
     assert build_kanban.watcher_commands("") == ("", "")
+
+
+# ── 1c: the watcher publishes the window ────────────────────────────────────
+
+import adt_sync  # noqa: E402
+import adt_watch  # noqa: E402
+
+
+def _project(tmp_path):
+    """A project root adt_sync.load_config can read, with an empty cache."""
+    cache = tmp_path / "cache"
+    (cache / "enhancements" / "ideas").mkdir(parents=True)
+    # A real ticket, so _cache_fingerprint returns a real mtime rather than the
+    # 0.0 an empty tree gives — a fixture that leaves the value at its zero
+    # default can satisfy an assertion by accident.
+    (cache / "enhancements" / "ideas" / "probe.md").write_text(
+        "---\nslug: probe\nid: PR-001\ntitle: probe\ntype: enhancement\n"
+        "stage: ideas\nstate: open\n---\n\n# probe\n")
+    adt = tmp_path / ".adt"
+    adt.mkdir()
+    (adt / "config.yaml").write_text(
+        "project: probe\n"
+        "repo: owner/probe\n"
+        "owner: owner\n"
+        "id_prefix: PR\n"
+        "backlog_root: \n"
+        f"cache_dir: {cache}\n"
+        "main_branch: main\n"
+    )
+    return str(tmp_path)
+
+
+def _run_tick(tmp_path, monkeypatch, *, breached=False, moved=False, on_sync=None):
+    """One real tick of adt_watch.watch(once=True) with the network stubbed.
+
+    Only the calls that reach GitHub or write HTML are replaced. The state
+    plumbing under test — _stamp_health, _save_watch_state, _watch_state — runs
+    for real against a temp sidecar.
+    """
+    root = _project(tmp_path)
+
+    def fake_sync(project_root, pull=True):
+        if on_sync is not None:
+            on_sync(root)
+        return moved
+
+    monkeypatch.setattr(adt_watch, "_sync", fake_sync)
+    monkeypatch.setattr(adt_watch, "_rate_limit_snapshot", lambda: [])
+    monkeypatch.setattr(adt_watch, "_pool_floor_breached",
+                        lambda pools: "core" if breached else "")
+    monkeypatch.setattr(adt_watch, "_branch_protection_snapshot",
+                        lambda *a, **k: None)
+    monkeypatch.setattr(adt_watch, "_render", lambda *a, **k: None)
+    monkeypatch.setattr(adt_watch.adt_machines, "report", lambda *a, **k: None)
+    monkeypatch.setattr(adt_watch.adt_phone_home, "run_once", lambda *a, **k: None)
+
+    adt_watch.watch(root, once=True)
+    return root
+
+
+def test_health_window_never_sentinel():
+    """The published value is a real stamp on BOTH sides of QUIET_GRACE.
+
+    _backoff_due returns 0.0 while quiet < QUIET_GRACE — gate 1's "run eagerly"
+    marker, not a time. Published to the page it reads as long expired and
+    paints an actively-syncing board red. _health_window must never do that, at
+    any quiet count, which is why it takes no quiet argument at all.
+    """
+    now = 1_700_000_000.0
+    for quiet in (0, 1, 2, 3, 10, 1000):
+        # The sentinel this function exists NOT to be, at the same quiet count:
+        if quiet < adt_watch.QUIET_GRACE:
+            assert adt_watch._backoff_due(quiet, now) == 0.0
+        assert adt_watch._health_window(now) == now + 360.0
+    assert adt_watch.HEALTH_WINDOW == adt_watch.BACKOFF_CAP + adt_watch.BACKOFF_BASE
+
+
+def test_window_stamped_before_sync(tmp_path, monkeypatch):
+    """Stamped BEFORE the long call, and again after it.
+
+    Placement, not presence: a build that writes both stamps at completion
+    fails the first assertion, and one that writes only the pre-sync stamp
+    fails the second.
+    """
+    seen = {}
+
+    def during_sync(root):
+        cfg = adt_sync.load_config(root)
+        seen["mid"] = adt_watch._health_stamp(cfg)
+
+    before = adt_watch._health_window(__import__("time").time())
+    root = _run_tick(tmp_path, monkeypatch, on_sync=during_sync)
+    cfg = adt_sync.load_config(root)
+    after = adt_watch._health_stamp(cfg)
+
+    assert seen["mid"] is not None, "no window published before _sync ran"
+    assert seen["mid"] >= before - 5, "the pre-sync stamp is not fresh"
+    assert after is not None
+    assert after >= seen["mid"], "no second stamp after the pass completed"
+
+
+def test_breached_tick_not_stamped(tmp_path, monkeypatch):
+    """A rate-limited tick must not refresh its own green light.
+
+    Both stamps sit inside the non-breached `else`, so forcing a breach means
+    neither runs. A build that stamps at lock acquisition — before the breach
+    check — fails this.
+    """
+    root = _run_tick(tmp_path, monkeypatch, breached=True)
+    cfg = adt_sync.load_config(root)
+    assert adt_watch._health_stamp(cfg) is None, (
+        "a breached tick published a window; the pill would read green on a "
+        "watcher that is deliberately not syncing")
+
+
+def test_watch_fields_untouched_by_stamp(tmp_path, monkeypatch):
+    """quiet/next_due/fp survive the healthy_until write, bit for bit.
+
+    healthy_until is a top-level key, so _update_state_doc's shallow merge
+    cannot reach into `watch`. A _health_stamp implemented as a wrapper over the
+    nested blob would pass every other condition while reintroducing the
+    shared-payload hazard that freezes the backoff ladder; this is what catches
+    it. Asserted by comparing the whole dict across a stamp rather than by
+    predicting each field's type.
+    """
+    root = _run_tick(tmp_path, monkeypatch, moved=False)
+    cfg = adt_sync.load_config(root)
+
+    before = dict(adt_watch._watch_state(cfg))
+    assert before, "the tick wrote no watch state; the fixture proves nothing"
+    assert "healthy_until" not in before, "the window leaked into the watch blob"
+
+    # The tick already stamped twice. Stamp again, directly: the write under
+    # test, in isolation, against state a real tick produced.
+    adt_watch._stamp_health(cfg, 1_700_000_000.0)
+
+    after = dict(adt_watch._watch_state(cfg))
+    assert after == before, (
+        f"the healthy_until write disturbed the watch blob:\n"
+        f"  before={before}\n  after ={after}")
+    assert adt_watch._health_stamp(cfg) == 1_700_000_000.0 + 360.0

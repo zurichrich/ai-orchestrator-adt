@@ -349,6 +349,15 @@ def _render(cache: str, cfg: dict, code_root: str = "",
 QUIET_GRACE = 3
 BACKOFF_BASE = 60.0
 BACKOFF_CAP = 300.0
+# AO-006. How long a completed pass vouches for the board it just rendered. The
+# page goes red once the clock passes the stamp, so this must EXCEED the longest
+# gap a healthy watcher can leave between passes, or a working board reads red.
+# BACKOFF_CAP is that longest gap by this module's own logic (_backoff_due
+# clamps to it); the extra BACKOFF_BASE covers the launchd StartInterval that
+# fires the next tick. Derived rather than written as 360.0 so retuning the
+# ladder cannot leave the two apart. Detection costs ~6 minutes as a result, and
+# the ticket states that bound rather than implying a tighter one.
+HEALTH_WINDOW = BACKOFF_CAP + BACKOFF_BASE
 # Ceiling on the doubling exponent, so the ladder cannot overflow float range
 # (see _backoff_due). 60s * 2**24 is 31 years — far above any cap anyone would
 # set, and far below the ~1024 shifts it takes to overflow.
@@ -367,6 +376,45 @@ BACKOFF_MAX_SHIFT = 24
 # whose numbers match observed behaviour; `test_watch_backoff_breaker.py` pins
 # the degenerate case so it cannot silently become unfireable again.
 RATE_FLOOR_SHARE = 0.15
+
+
+def _health_window(now: float) -> float:
+    """When the board rendered at `now` stops vouching for itself.
+
+    UNCONDITIONAL, and that is the point. Its neighbour `_backoff_due` returns
+    0.0 as an eager sentinel while `quiet < QUIET_GRACE`, which is gate 1's
+    "don't gate me" marker and not a time. Published to the page, that sentinel
+    reads as an hour-past deadline and paints a healthy, actively-syncing board
+    red. This function takes only `now` — it cannot branch on `quiet`, so it
+    cannot grow that bug back. test_health_window_never_sentinel pins it.
+    """
+    return now + HEALTH_WINDOW
+
+
+def _health_stamp(cfg: dict) -> float | None:
+    """The published window, or None when nothing has stamped one yet.
+
+    A TOP-LEVEL key, deliberately not a fourth field inside `watch`.
+    `_update_state_doc` merges at the top level only (`doc.update(updates)`), so
+    its guarantee — clobbering a key another writer owns is structurally
+    impossible — holds between top-level keys but NOT between fields sharing one
+    dict. `_save_watch_state` writes quiet/next_due/fp as a single payload, and
+    those are only known after `_sync()` returns; threading this through it
+    would make the pre-sync write re-pass values it does not have, and a wrong
+    `quiet` freezes the backoff ladder at eager (ADT-147's rate-limit
+    conservation, silently gone). Separate key, separate writer, no shared
+    payload to corrupt.
+
+    None means "no window published" and the renderer omits the pill entirely.
+    Never coerce it to 0.0, which the page would read as long expired.
+    """
+    v = adt_sync._load_state_doc(cfg).get("healthy_until")
+    return float(v) if isinstance(v, (int, float)) else None
+
+
+def _stamp_health(cfg: dict, now: float) -> None:
+    """Publish the window. One key, so this cannot disturb `watch`."""
+    adt_sync._update_state_doc(cfg, {"healthy_until": _health_window(now)})
 
 
 def _watch_state(cfg: dict) -> dict:
@@ -532,6 +580,18 @@ def watch(project_root: str, interval: float = 5.0, once: bool = False) -> None:
                               f"for other machines on this account (ADT-147).",
                               file=sys.stderr)
                     else:
+                        # AO-006: vouch for the board BEFORE the long call, not
+                        # only after it. _gh() is untimed (adt_sync.py:168) and
+                        # reconcile_all calls it once per changed file, so a bulk
+                        # push can outrun the window the previous pass left and
+                        # paint a live, working watcher red. Stamping here gives
+                        # the pass its own full window.
+                        #
+                        # Inside this `else`, never at lock acquisition: the
+                        # breach check above would then be bypassed, and a
+                        # rate-limited tick — which is genuinely not syncing —
+                        # would keep refreshing its own green light forever.
+                        _stamp_health(cfg, now)
                         moved = _sync(project_root)  # push local changes + pull remote
                         last_fp = _cache_fingerprint(cache)  # re-read: our own write-backs
                         # (issue_number, pulled changes) bump mtimes; capture post-sync so
@@ -539,6 +599,11 @@ def watch(project_root: str, interval: float = 5.0, once: bool = False) -> None:
                         quiet_ticks = 0 if moved else int(st.get("quiet") or 0) + 1
                         _save_watch_state(cfg, quiet_ticks,
                                           _backoff_due(quiet_ticks, now), last_fp)
+                        # Re-stamp from the clock NOW, not from the `now` the
+                        # tick opened with: a slow pass has consumed part of the
+                        # window it was given, and the board it is about to
+                        # render is fresh as of this moment.
+                        _stamp_health(cfg, time.time())
                     # ADT-384: once a UTC day, this machine's ADT version and
                     # commit go on the adt:install Issue, where other machines'
                     # installers and boards read them. Before the render, so
