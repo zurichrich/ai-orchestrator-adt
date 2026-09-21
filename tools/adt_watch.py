@@ -404,21 +404,31 @@ def _is_paused(cache: str) -> bool:
 
 
 def _set_paused(cfg: dict, cache: str, paused: bool) -> bool:
-    """Flip the flag, and clear the backoff on the way through.
+    """Flip the flag, and RETRACT the published window when pausing.
 
-    The ladder reset is the half that is easy to miss: after QUIET_GRACE
-    all-noop ticks `next_due` is up to BACKOFF_CAP away, so a resume would sit
-    idle for up to five minutes and look broken. Only a resident watcher can do
-    this, because the process that owns the tick state is the one taking the
-    click.
+    Retracting is the half a first cut misses. The window says "a completed pass
+    vouches for this board until T", and T is up to HEALTH_WINDOW away when the
+    stop lands. Leave it and the board reads `sync on` for six more minutes on a
+    watcher the user just stopped — the exact false-green this ticket exists to
+    prevent, arriving through the pause it added. Stamping it into the past
+    makes the next render, and the toggle's own reload, show red immediately.
+
+    It does NOT reset the backoff ladder. That is the loop's job now
+    (`_resume_is_due`): this runs on the HTTP thread, and `_update_state_doc` is
+    an unlocked read-modify-write of the whole sidecar whose no-clobber
+    guarantee assumes one writer under the pass lock. Writing the watch blob
+    from here both lost the reset to the tick's own write and could clobber
+    `file_hashes`, which would re-push every ticket.
     """
     flag = _pause_flag(cache)
     if paused:
         with open(flag, "w"):
             pass
+        # Expire the window: one second past, so the pill is red on the very
+        # next render rather than at the end of the old window.
+        adt_sync._update_state_doc(cfg, {"healthy_until": time.time() - 1.0})
     elif os.path.exists(flag):
         os.unlink(flag)
-    _save_watch_state(cfg, 0, 0.0, _watch_state(cfg).get("fp") or 0.0)
     return _is_paused(cache)
 
 
@@ -446,6 +456,34 @@ def _serve_board(cfg: dict, cache: str, port: int):
     class _H(http.server.BaseHTTPRequestHandler):
         server_version = "adt-watch"
 
+        def _host_ok(self) -> bool:
+            """Loopback Host only — the defence against DNS rebinding.
+
+            Binding to 127.0.0.1 does not cover this: a name the attacker owns
+            can resolve to 127.0.0.1, and the browser sends that name in Host.
+            The board carries every ticket body and the cost figures, so a
+            readable GET is a real leak.
+            """
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+            return host in ("127.0.0.1", "localhost", "::1", "")
+
+        def _same_origin(self) -> bool:
+            """Reject a cross-origin toggle.
+
+            A POST with a simple Content-Type is NOT preflighted, so without
+            this any page in any tab could stop the user's sync — and the board
+            would show nothing until the next render. Requiring a custom header
+            forces a preflight, which is never answered here, so a cross-origin
+            caller cannot reach the handler. Origin is checked too, for a caller
+            that sets the header directly.
+            """
+            if self.headers.get("X-ADT-Board") != "1":
+                return False
+            origin = self.headers.get("Origin")
+            if origin is None:
+                return True                  # a same-origin fetch sends none
+            return origin.startswith(("http://127.0.0.1", "http://localhost"))
+
         def _send(self, body: bytes, ctype: str, code: int = 200):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -454,6 +492,12 @@ def _serve_board(cfg: dict, cache: str, port: int):
             self.wfile.write(body)
 
         def do_POST(self):
+            if not self._host_ok():
+                self._send(b'{"error":"bad host"}', "application/json", 403)
+                return
+            if not self._same_origin():
+                self._send(b'{"error":"cross-origin"}', "application/json", 403)
+                return
             if self.path.rstrip("/") != "/sync/toggle":
                 self._send(b'{"error":"not found"}', "application/json", 404)
                 return
@@ -464,6 +508,9 @@ def _serve_board(cfg: dict, cache: str, port: int):
                        "application/json")
 
         def do_GET(self):
+            if not self._host_ok():
+                self._send(b"bad host", "text/plain", 403)
+                return
             if self.path.split("?")[0].rstrip("/") not in ("", "/"):
                 self._send(b"not found", "text/plain", 404)
                 return
@@ -642,6 +689,24 @@ def watch(project_root: str, interval: float = 5.0, once: bool = False) -> None:
         # write zero bytes to the launchd log. Only the breaker below speaks.
         st = _watch_state(cfg)
         now = time.time()
+
+        # --- gate 0 (AO-006): paused. Before the pass lock and before any gh
+        # call: _rate_limit_snapshot and _branch_protection_snapshot both shell
+        # out, so a pause that only skipped the SYNC still spent a REST point
+        # and a GraphQL point every tick on a board the user believes is
+        # stopped. Nothing here touches the network or holds the lock.
+        #
+        # The ladder is held at eager while paused, so the tick after the flag
+        # clears runs its pass immediately — a resume that inherited a 300s
+        # next_due would look exactly like a button that did nothing. This runs
+        # on the LOOP's thread, which is the only one that may write the watch
+        # blob; the toggle writes the flag and the window, and nothing else.
+        if _is_paused(cache):
+            _save_watch_state(cfg, 0, 0.0, st.get("fp") or 0.0)
+            if once:
+                return
+            time.sleep(interval)
+            continue
 
         # The fingerprint is a local mtime walk — no API calls — so it is read
         # BEFORE the backoff gate, not after. Two reasons (ADT-147 altitude

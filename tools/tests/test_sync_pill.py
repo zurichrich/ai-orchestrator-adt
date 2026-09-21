@@ -12,9 +12,12 @@ watcher's own state must survive the extra write.
 
 from __future__ import annotations
 
+import json
+import pathlib
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent.parent
@@ -254,6 +257,7 @@ const vm = require('vm');
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[2], 'utf8');
 
+let ctxFetch = () => Promise.reject('no fetch');
 let execResult = false;
 let navigatorStub = {};
 const pending = [];
@@ -301,6 +305,7 @@ function page(healthyUntil, proto) {
     localStorage: { getItem: () => null, setItem() {} },
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: navigatorStub,
+    fetch: function (...a) { return ctxFetch(...a); },
     setTimeout: fn => { pending.push(fn); },
     JSON: JSON,
     Date: Date,
@@ -318,17 +323,23 @@ function page(healthyUntil, proto) {
     label: label.textContent, hidden: el.hidden, attrs: attrs, title: el.title,
     disabled: el.disabled,
     click: fire,
-    state: () => ({ label: label.textContent, aria: attrs['aria-label'],
-                    textareas: textareas.map(
-                      ta => ({ attached: ta.attached, selected: ta.selected,
-                               value: ta.value })) }),
+    state: () => ({
+      on: classes.has('sync-on'), off: classes.has('sync-off'),
+      label: label.textContent, hidden: el.hidden, attrs: attrs,
+      title: el.title, disabled: el.disabled, aria: attrs['aria-label'],
+    }),
     flush: () => { const q = pending.splice(0); q.forEach(fn => fn()); },
   };
 }
 
 const result = {};
 __SCENARIO__
-process.stdout.write(JSON.stringify(result));
+setImmediate(function () {
+  for (const k of Object.keys(result)) {
+    if (result[k] && typeof result[k].state === 'function') result[k] = result[k].state();
+  }
+  process.stdout.write(JSON.stringify(result));
+});
 """
 
 
@@ -527,52 +538,187 @@ def test_file_url_disables_the_button(tmp_path):
     assert out["onDisk"]["on"] is True and out["onDisk"]["label"] == "sync on"
 
 
-def test_pause_flag_round_trip(tmp_path, monkeypatch):
-    """_set_paused flips the flag AND clears the backoff.
+def test_stop_retracts_the_window(tmp_path, monkeypatch):
+    """Pressing stop must expire the published window, not just set a flag.
 
-    The ladder reset is the half that is easy to miss: after QUIET_GRACE
-    all-noop ticks `next_due` is up to BACKOFF_CAP away, so a resume would sit
-    idle for minutes and look broken. Proven by driving a real tick first, so
-    the state under test is one a real watcher produced.
+    QA round 3: it did not. The window a completed pass published is up to
+    HEALTH_WINDOW in the future when the stop lands, and syncPill() decides
+    colour from that number alone — so the board read `sync on` for six more
+    minutes on a watcher the user had just stopped, and the toggle's own reload
+    took them straight to it.
     """
     root = _run_tick(tmp_path, monkeypatch, moved=False)
     cfg = adt_sync.load_config(root)
     cache = adt_sync.cache_dir(cfg)
 
-    assert adt_watch._is_paused(cache) is False
-    # Put the ladder somewhere a resume would have to climb down from.
-    adt_watch._save_watch_state(cfg, 9, 1e12, "fp")
-    assert adt_watch._watch_state(cfg)["next_due"] == 1e12
-
-    assert adt_watch._set_paused(cfg, cache, True) is True
-    assert adt_watch._is_paused(cache) is True
-    st = adt_watch._watch_state(cfg)
-    assert st["quiet"] == 0 and st["next_due"] == 0.0, (
-        "the backoff was not cleared; a resume would idle for up to "
-        "BACKOFF_CAP seconds and look broken")
-
-    assert adt_watch._set_paused(cfg, cache, False) is False
-    assert adt_watch._is_paused(cache) is False
-
-
-def test_paused_tick_does_not_sync_and_goes_red(tmp_path, monkeypatch):
-    """Paused means the loop keeps running and skips the pass.
-
-    The window is not re-stamped, so the pill goes red — truthful, because the
-    board is genuinely not being synced. This is the whole reason pause beats
-    unloading the agent: the process stays alive to be started again.
-    """
-    root = _run_tick(tmp_path, monkeypatch, moved=False)
-    cfg = adt_sync.load_config(root)
-    cache = adt_sync.cache_dir(cfg)
-    stamped_while_running = adt_watch._health_stamp(cfg)
-    assert stamped_while_running is not None
+    running = adt_watch._health_stamp(cfg)
+    assert running > time.time(), "the fixture did not leave a live window"
 
     adt_watch._set_paused(cfg, cache, True)
-    synced = []
-    _run_tick(tmp_path, monkeypatch, on_sync=lambda r: synced.append(1),
-              existing_root=root)
-    assert synced == [], "a paused tick still called _sync"
-    assert adt_watch._health_stamp(cfg) == stamped_while_running, (
-        "a paused tick re-stamped the window; the pill would stay green on a "
-        "board that is not being synced")
+    stopped = adt_watch._health_stamp(cfg)
+    assert stopped < time.time(), (
+        f"stop left the window {round(stopped - time.time())}s in the future; "
+        f"the pill would read `sync on` for that long on a stopped watcher")
+
+
+def test_toggle_does_not_write_the_watch_blob(tmp_path, monkeypatch):
+    """The toggle runs on the HTTP thread and must not touch `watch`.
+
+    `_update_state_doc` is an unlocked read-modify-write of the whole sidecar;
+    its no-clobber guarantee assumes one writer under the pass lock. Writing the
+    watch blob from the toggle both lost the ladder reset to the tick's own
+    write and could clobber `file_hashes`, which re-pushes every ticket.
+    """
+    root = _run_tick(tmp_path, monkeypatch, moved=False)
+    cfg = adt_sync.load_config(root)
+    cache = adt_sync.cache_dir(cfg)
+
+    adt_watch._save_watch_state(cfg, 7, 1e12, "fp-sentinel")
+    before = dict(adt_watch._watch_state(cfg))
+
+    adt_watch._set_paused(cfg, cache, True)
+    adt_watch._set_paused(cfg, cache, False)
+
+    assert dict(adt_watch._watch_state(cfg)) == before, (
+        "the toggle wrote the watch blob from the HTTP thread")
+
+
+def test_paused_tick_is_eager_and_makes_no_gh_call(tmp_path, monkeypatch):
+    """A paused tick skips everything, including the two `gh` snapshots.
+
+    The pause gate sits before the pass lock and before _rate_limit_snapshot /
+    _branch_protection_snapshot, both of which shell out. A pause that only
+    skipped the sync still spent a REST point and a GraphQL point per tick on a
+    board the user believes is stopped. It also holds the ladder at eager, so
+    the tick after the flag clears runs immediately.
+    """
+    root = _project(tmp_path)
+    cfg = adt_sync.load_config(root)
+    cache = adt_sync.cache_dir(cfg)
+    adt_watch._set_paused(cfg, cache, True)
+    adt_watch._save_watch_state(cfg, 9, 1e12, "fp")     # a deep backoff
+
+    called = []
+    for name in ("_sync", "_rate_limit_snapshot", "_branch_protection_snapshot",
+                 "_render"):
+        monkeypatch.setattr(adt_watch, name,
+                            (lambda n: lambda *a, **k: called.append(n))(name))
+    monkeypatch.setattr(adt_watch.adt_machines, "report", lambda *a, **k: None)
+    monkeypatch.setattr(adt_watch.adt_phone_home, "run_once", lambda *a, **k: None)
+    adt_watch.watch(root, once=True)
+
+    assert called == [], f"a paused tick called {called}"
+    st = adt_watch._watch_state(cfg)
+    assert st["quiet"] == 0 and st["next_due"] == 0.0, (
+        "the ladder was not held at eager; a resume would idle for up to "
+        "BACKOFF_CAP seconds and look like a button that did nothing")
+
+
+# ── the control server (QA round 3: M4, M5 — no test made an HTTP request) ──
+
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+
+def _board_server(tmp_path, body=b"<html>BOARD</html>"):
+    root = _project(tmp_path)
+    cfg = adt_sync.load_config(root)
+    cache = adt_sync.cache_dir(cfg)
+    if body is not None:
+        pathlib.Path(cache, "kanban.html").write_bytes(body)
+    srv = adt_watch._serve_board(cfg, cache, 0)       # 0 = ephemeral port
+    return cfg, cache, srv, f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+def _req(url, *, method="GET", headers=None, host=None):
+    r = urllib.request.Request(url, method=method, data=b"" if method == "POST" else None)
+    for k, v in (headers or {}).items():
+        r.add_header(k, v)
+    if host:
+        r.add_header("Host", host)
+    try:
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def test_server_serves_only_the_board(tmp_path):
+    """Two routes. Anything else 404s — M4 survived because nothing asked."""
+    _cfg, _cache, srv, base = _board_server(tmp_path)
+    try:
+        assert _req(base + "/")[0] == 200
+        assert _req(base + "/?x=1")[0] == 200
+        for path in ("/kanban.html", "/../../etc/passwd", "/anything",
+                     "/enhancements/ideas/p.md"):
+            code, body = _req(base + path)
+            assert code == 404, f"{path} returned {code}"
+            assert b"BOARD" not in body
+    finally:
+        srv.shutdown()
+
+
+def test_server_toggles_only_on_its_own_route(tmp_path):
+    """M5: a POST to any path used to flip sync."""
+    cfg, cache, srv, base = _board_server(tmp_path)
+    hdr = {"X-ADT-Board": "1"}
+    try:
+        assert _req(base + "/nope", method="POST", headers=hdr)[0] == 404
+        assert adt_watch._is_paused(cache) is False, "a stray POST flipped sync"
+        code, body = _req(base + "/sync/toggle", method="POST", headers=hdr)
+        assert code == 200 and json.loads(body)["paused"] is True
+        assert adt_watch._is_paused(cache) is True
+    finally:
+        srv.shutdown()
+
+
+def test_server_rejects_cross_origin_and_foreign_host(tmp_path):
+    """Any page in any tab could stop the user's sync, and a rebound DNS name
+    could read the whole backlog. Both measured before the guards existed."""
+    cfg, cache, srv, base = _board_server(tmp_path)
+    try:
+        # No custom header -> a CORS *simple* request, which is not preflighted.
+        assert _req(base + "/sync/toggle", method="POST")[0] == 403
+        assert adt_watch._is_paused(cache) is False
+        # Header present but a foreign Origin.
+        assert _req(base + "/sync/toggle", method="POST",
+                    headers={"X-ADT-Board": "1",
+                             "Origin": "https://evil.example"})[0] == 403
+        assert adt_watch._is_paused(cache) is False
+        # DNS rebinding: the name resolves here, so only Host can tell.
+        code, body = _req(base + "/", host="evil.example")
+        assert code == 403 and b"BOARD" not in body
+    finally:
+        srv.shutdown()
+
+
+def test_server_503s_before_the_first_render(tmp_path):
+    _cfg, _cache, srv, base = _board_server(tmp_path, body=None)
+    try:
+        assert _req(base + "/")[0] == 503
+    finally:
+        srv.shutdown()
+
+
+def test_toggle_reports_what_the_server_said(tmp_path):
+    """M8: the toggle always said 'stopped', even on a start, and nothing saw
+    it — the shipped harness provides no fetch, so the click path was ungraded.
+    """
+    out = _run_pill(tmp_path, """
+      const now = Math.floor(Date.now() / 1000);
+      const run = (paused, ok) => {
+        const p = page(now + 300);
+        ctxFetch = () => ok
+          ? Promise.resolve({ok: true, json: () => Promise.resolve({paused: paused})})
+          : Promise.resolve({ok: false, status: 500});
+        p.click();
+        return p;        // serialised as p.state() once microtasks have run
+      };
+      result.stopped = run(true, true);
+      result.started = run(false, true);
+      result.failed  = run(true, false);
+    """)
+    assert out["stopped"]["label"] == "stopped"
+    assert out["started"]["label"] == "started", (
+        "a start reported 'stopped'; the label must echo the server, not a guess")
+    assert out["failed"]["label"] == "failed"

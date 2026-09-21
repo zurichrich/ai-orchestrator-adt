@@ -248,7 +248,14 @@ EOF
         echo "  [watcher] removed the pre-AO-006 $unit.timer (the service is resident now)" >&2
       fi
       systemctl --user daemon-reload 2>/dev/null || true
-      systemctl --user enable --now "$unit.service" 2>/dev/null \
+      # `enable --now` starts a stopped unit but does NOT restart a running one,
+      # so a rewritten unit file had no effect until a reboot: changing the
+      # interval, or upgrading ADT, silently kept the old argv. That was
+      # invisible before AO-006 because the unit was a oneshot and the timer
+      # picked up the new file on its next fire; a resident service does not.
+      # The launchd branch has always handled this by bootout + bootstrap.
+      systemctl --user enable "$unit.service" 2>/dev/null || true
+      systemctl --user restart "$unit.service" 2>/dev/null \
         && echo "  installed systemd --user watcher: $unit.service (resident, ${interval}s loop)" \
         || echo "  (systemd --user not active — enable later: systemctl --user enable --now $unit.service)" >&2
       return 0

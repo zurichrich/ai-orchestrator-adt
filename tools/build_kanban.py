@@ -1917,7 +1917,7 @@ function syncPillToggle(el) {
   const restore = label.textContent;
   el.disabled = true;
   label.textContent = '\u2026';
-  fetch('/sync/toggle', {method: 'POST'})
+  fetch('/sync/toggle', {method: 'POST', headers: {'X-ADT-Board': '1'}})
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function (s) {
       label.textContent = s.paused ? 'stopped' : 'started';
