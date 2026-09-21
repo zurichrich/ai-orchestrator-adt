@@ -220,7 +220,7 @@ COUNT_ALL = re.compile(r"\b(?:all|every|only|none|exactly|each)\b", re.IGNORECAS
 # the sentence, "9 distinct markers, all ok (AO-006)" went unchecked while the
 # same words without the ticket id were flagged — and a trailing ticket id is
 # close to a habit in this repo's prose, so the check's reach was far narrower
-# than its tests suggested (QA finding 6).
+# than its tests suggested (QA finding 7).
 COUNT_SKIP = re.compile(r":\s*[0-9]+\b|\b[A-Z]{2,4}-[0-9]+\b")
 # What counts as counting. `len(` is here because an inline `python3 -` script is
 # how this project's own counts are usually produced; without it the check fires
@@ -242,7 +242,7 @@ if claim and not COUNTING.search(" ".join(turn_bash_cmds)):
     msgs.append(
         "a counted or completeness claim whose command cannot support it: %r. "
         "No command in this turn counted anything: no wc, grep -c, uniq -c, "
-        "--count or len(. Cite the command that produced the number, or drop "
+        "--count or len(). Cite the command that produced the number, or drop "
         "the claim (working-style #13)." % claim[:120])
 
 if msgs:

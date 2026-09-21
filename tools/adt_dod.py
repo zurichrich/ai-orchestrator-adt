@@ -1404,6 +1404,16 @@ def _cli(argv):
     if args.check_authoring:
         # Reports, and exits 1 so a finding cannot be scrolled past. No
         # --devteam: nothing here resolves a rendered artifact.
+        #
+        # The path is checked FIRST. Every function below fails open on an
+        # unreadable ticket, so a mistyped path used to print CLEAN and exit 0 —
+        # a check that cannot fail, which is the class this whole ticket is
+        # about. Found by a QA probe that was handed a stale path.
+        if not os.path.isfile(args.ticket_md):
+            print("REFUSE\tno ticket at %s — every check below reads that file "
+                  "and fails open, so a wrong path would print CLEAN"
+                  % args.ticket_md)
+            return 1
         found = authoring_defects(args.ticket_md)
         for code, msg in found:
             print("%-8s %s" % (code, msg))
@@ -1867,11 +1877,20 @@ def reopened_dependencies(ticket_md_path):
         # declaration made two rounds earlier. AO-006's actual sequence was a
         # declaration in round 3 followed by delta re-reviews in 4 and 5 and the
         # code change in 6, so the last-row rule missed the incident this
-        # mechanism was built from (QA finding 7).
+        # mechanism was built from (QA finding 8).
         #
         # The HASH still comes from the newest row: the question is whether the
         # spec has moved since anyone last looked, and the newest verdict is when
         # anyone last looked.
+        #
+        # THE COST, named rather than discovered: there is no way to retract a
+        # declaration. The reviewer's template offers `<file>:<symbol>` or
+        # `none`, and `none` means "this round rests on nothing", not "withdraw
+        # round 1". So a dependency declared once is re-raised on every later
+        # spec move until some round declares its own, and each reopen is
+        # answered by recording a verdict rather than by editing anything. That
+        # is the mechanism working as specified; a retraction token would be the
+        # thing that closes it.
         declared = [r for r in mine if (r.get("rests_on") or "").strip()]
         if not declared:
             continue

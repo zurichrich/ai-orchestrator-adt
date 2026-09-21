@@ -157,13 +157,31 @@ out="$(run "$T")"
 counted "$out" && bad "a pytest-backed pass-claim was flagged by (e): $out" \
                 || ok "pass-claim left to check (c) -> not flagged by (e)"
 
-# e7. A sentence whose only number IS a reference carries no quantity at all.
+# e7. A ticket id supplying the only quantity. This is the case that fails if the
+# reference strip goes away, or if COUNT_SKIP loses its ticket-id arm: without the
+# strip, "AO-006 markers" reads as "006 markers" and the sentence flags.
 T="$TMP/e7.jsonl"; : > "$T"
+user_text "did they survive" "$T"
+asst_text "AO-006 markers are all present." "$T"
+out="$(run "$T")"
+counted "$out" && bad "a ticket id was read as a quantity: $out" \
+                || ok "a ticket id is not a quantity -> not flagged"
+
+# e7b. The same, for a file:line reference supplying the only quantity.
+T="$TMP/e7b.jsonl"; : > "$T"
+user_text "where" "$T"
+asst_text "The tools/adt_dod.py:1415 lines are all green." "$T"
+out="$(run "$T")"
+counted "$out" && bad "a file:line was read as a quantity: $out" \
+                || ok "a line number is not a quantity -> not flagged"
+
+# e7c. A sentence with no quantity at all, reference or otherwise.
+T="$TMP/e7c.jsonl"; : > "$T"
 user_text "where" "$T"
 asst_text "Every marker is at tools/adt_watch.py:404." "$T"
 out="$(run "$T")"
 counted "$out" && bad "a citation-only sentence was read as a counted claim: $out" \
-                || ok "a number that is only a citation -> not flagged"
+                || ok "no quantity present -> not flagged"
 
 # e8. The regression QA found: the skip used to exempt the whole sentence, so a
 # trailing ticket id switched the check off. A ticket id is close to a habit in

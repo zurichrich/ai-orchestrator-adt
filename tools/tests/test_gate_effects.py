@@ -494,6 +494,117 @@ class DeclaredDependencyTest(unittest.TestCase):
                 "the round-1 declaration still stands; round 2 rested on nothing")
 
 
+    def test_the_newest_of_two_declarations_wins(self):
+        """`declared[-1]`, not `declared[0]`. With one declaring round the two are
+        the same value, so nothing distinguished them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read() + (
+                "### DoD-coverage review\n**Verdict:** COVERED\n"
+                "**Depends-on-unmodified:** tools/build_kanban.py:_render\n")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py and tools/build_kanban.py")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.reopened_dependencies(t)
+            self.assertEqual(out, [("coverage", 2, "tools/build_kanban.py:_render")],
+                             "the newest declaration is the live one")
+
+    def test_the_hash_comes_from_the_newest_row_not_the_declaring_one(self):
+        """Otherwise a `none` round would never register as "someone looked
+        since", and an unchanged spec would reopen on every run."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py")
+            open(t, "w", encoding="utf-8").write(body)
+            self.assertEqual(len(adt_dod.reopened_dependencies(t)), 1,
+                             "the spec moved after the only verdict")
+            # A later round looks at the moved text and rests on nothing. The
+            # question "has anyone looked since?" is now answered yes.
+            body = open(t, encoding="utf-8").read() + (
+                "### DoD-coverage review\n**Verdict:** COVERED\n"
+                "**Depends-on-unmodified:** none\n")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "coverage")
+            self.assertEqual(adt_dod.reopened_dependencies(t), [],
+                             "the newest row saw this text, so nothing is open")
+
+    def test_no_note_on_plan_quality_however_the_block_reads(self):
+        """`rests_on` is coverage-only, and the plan-quality template was never
+        taught to emit the line, so asking for it there warns on correct work."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=QUALITY.format(v="SOUND")
+                       + "It needs no test: existing, unmodified code.\n")
+            r = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+                 t, "--record-verdict", "plan-quality"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("RECORDED", r.stdout)
+            self.assertNotIn("declared no dependency", r.stderr,
+                             "the NOTE belongs to coverage only")
+
+
+class CheckAuthoringCliTest(unittest.TestCase):
+    """`--check-authoring` had no test at all, so two of its decisions could be
+    reverted without anything noticing."""
+
+    def _run(self, path):
+        return subprocess.run(
+            [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
+             path, "--check-authoring"], capture_output=True, text=True,
+            cwd=ROOT)
+
+    def _planned(self, tmp, design):
+        d = os.path.join(tmp, "planned")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "t.md")
+        open(p, "w", encoding="utf-8").write(
+            "---\nid: C-1\ntrack: standard\ndone_evidence:\n"
+            "  - must_run: 'true'\n    lane: build\n---\n\n# b\n\n"
+            "## Plan (PM)\n\n### Design\n%s\n\n### Risks\n- none.\n"
+            "### Test plan\n- a test\n### Problem & goal\nx\n"
+            "### Impact / ripple analysis\nnone\n### Sub-steps\n- 1a do it\n"
+            "### DoD-coverage review\n**Verdict:** COVERED\n" % design)
+        return p
+
+    def test_a_skipped_citation_alone_exits_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self._planned(tmp, "- borrows: `tools/absent_module.py:1-6` "
+                                   "`_gone` — exits 4 — the deadline this "
+                                   "design compares the clock against.")
+            r = self._run(p)
+            self.assertIn("SKIPPED", r.stdout)
+            self.assertEqual(r.returncode, 0,
+                             "a citation the checker could not resolve is not a "
+                             "defect in the spec: " + r.stdout)
+
+    def test_a_real_defect_exits_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self._planned(tmp, "- borrows: none")
+            body = open(p, encoding="utf-8").read().replace(
+                "### Risks\n- none.", "### Risks\n- this assumes the marker is set.")
+            open(p, "w", encoding="utf-8").write(body)
+            r = self._run(p)
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertIn("CAVEAT", r.stdout)
+
+    def test_a_missing_ticket_refuses_rather_than_reading_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(os.path.join(tmp, "nope.md"))
+            self.assertEqual(r.returncode, 1, r.stdout)
+            self.assertTrue(r.stdout.startswith("REFUSE\t"), r.stdout)
+            # Not `assertNotIn("CLEAN")`: the refusal's own text explains that a
+            # wrong path WOULD have printed CLEAN, so the word is expected in it.
+            self.assertFalse(r.stdout.startswith("CLEAN"), r.stdout)
+
+
 class UngradedSectionTest(unittest.TestCase):
     def test_a_plan_missing_some_graded_sections_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -514,6 +625,36 @@ class UngradedSectionTest(unittest.TestCase):
             open(t, "w", encoding="utf-8").write(
                 head + "## Plan (PM)\n\nA one-line fix, no sections.\n")
             self.assertEqual(adt_dod.ungraded_sections(t), [])
+
+    def test_a_complete_plan_reports_nothing(self):
+        """Dropping the `not missing` arm would report "6 of 6" on every correct
+        ticket, which is the false-positive class this check was fixed for."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(adt_dod.ungraded_sections(ticket(tmp)), [])
+
+    def test_one_missing_section_is_still_reported(self):
+        """The all-but-one boundary: five of six present must still report."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            body = open(t, encoding="utf-8").read().replace(
+                "### Test plan", "### Verification")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.ungraded_sections(t)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("5 of 6", out[0][1])
+
+    def test_one_section_present_is_reported_not_suppressed(self):
+        """The other side of the boundary. Suppression is for a plan with NO
+        graded sections; one present and five missing is drift, and a suppression
+        arm widened by one would swallow it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            head = open(t, encoding="utf-8").read().split("## Plan (PM)")[0]
+            open(t, "w", encoding="utf-8").write(
+                head + "## Plan (PM)\n\n### Design\nthe only section.\n")
+            out = adt_dod.ungraded_sections(t)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("1 of 6", out[0][1])
 
     def test_a_ticket_with_no_plan_is_not_missing_anything(self):
         with tempfile.TemporaryDirectory() as tmp:
