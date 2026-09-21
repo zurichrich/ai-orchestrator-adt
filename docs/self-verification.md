@@ -25,28 +25,7 @@ losing, because nothing graded them. That is the argument for grading them.
 A claim about the state of the system must be traceable to something the session
 actually ran or read *in that turn*, or it is not made.
 
-Enforced by **`defaults/hooks/adt-phrase-linter.sh`** (a `Stop` hook), which pairs a
-
-**Warn-only, alongside the two enforced rules: the counted claim (AO-013).**
-`adt-phrase-linter.sh` check (e) flags a counted or completeness claim whose command cannot support it —
-a sentence carrying both a quantity and a completeness word in a turn where
-nothing counted anything. Two such claims shipped in one AO-006 session, "9
-distinct markers, all ok" from a grep that stopped at newlines and "the only two
-remaining mentions" from a three-phrase grep that never counted mentions, and a
-reviewer caught both. The standard is working-style #13; `/adt-brief` has
-required it of `rnd-*` research notes for longer, and this is the same rule for
-every report. What counts as counting includes `len(` inside an inline `python3`
-script, because that is how this project's own counts are usually produced.
-
-**Warn-only, alongside the two enforced rules: the write budget (ADT-260).**
-`adt-phrase-linter.sh` also flags a ticket log entry longer than 12 lines. It is a
-WARNING, not a denial. Not because it could not: exit 2 on a Stop hook blocks the stop and hands stderr back as the reason, which is what `adt-close-complete.sh` does (ADT-336). This one warns because refusing prose on length
-would be worse than the verbosity. It exists because the read side was already
-budgeted (`adt-budget:` in every `commands/*.md`) and the write side was not: a
-retitle of three frontmatter fields produced a 30-line log entry, chosen by the
-writer with no budget to hit. The entry scales with the DIFF, not with the
-reasoning that produced it. Not covered by a test.
-*claim* regex against the turn's `tool_use` records. Two claim shapes:
+Enforced by **`defaults/hooks/adt-phrase-linter.sh`** (a `Stop` hook), which pairs a *claim* regex against the turn's `tool_use` records. Two claim shapes:
 
 | claim | evidence required |
 |---|---|
@@ -60,6 +39,26 @@ nothing extractable, and `test_phrase_linter_claims.sh` case 5 documents that
 weakness rather than hiding it.
 
 Warn-only: a `Stop` hook cannot deny.
+
+**Warn-only, alongside the two enforced rules: the counted claim (AO-013).**
+`adt-phrase-linter.sh` check (e) flags a counted or completeness claim whose command cannot support it —
+a sentence carrying both a quantity and a completeness word in a turn where
+nothing counted anything. Two such claims shipped in one AO-006 session, "9
+distinct markers, all ok" from a grep that stopped at newlines and "the only two
+remaining mentions" from a three-phrase grep that never counted mentions, and a
+reviewer caught both. The standard is working-style #13; `/adt-brief` has
+required it of `rnd-*` research notes for longer, and this is the same rule for
+every report. What counts as counting includes `len(` inside an inline `python3`
+script, because that is how this project's own counts are usually produced.
+**Warn-only, alongside the two enforced rules: the write budget (ADT-260).**
+`adt-phrase-linter.sh` also flags a ticket log entry longer than 12 lines. It is a
+WARNING, not a denial. Not because it could not: exit 2 on a Stop hook blocks the stop and hands stderr back as the reason, which is what `adt-close-complete.sh` does (ADT-336). This one warns because refusing prose on length
+would be worse than the verbosity. It exists because the read side was already
+budgeted (`adt-budget:` in every `commands/*.md`) and the write side was not: a
+retitle of three frontmatter fields produced a 30-line log entry, chosen by the
+writer with no budget to hit. The entry scales with the DIFF, not with the
+reasoning that produced it. Not covered by a test.
+
 
 ### Rule 2 — no casual deferral
 
@@ -141,7 +140,11 @@ they print a NOTE on stderr.** A borrow declaration describes the code as it was
 before the diff, so it goes stale the moment the build lands and a refusal at
 release would fail a correct ticket. The lane is read from the folder, not from
 `stage:`, which can lag it by a tick. `--check-authoring` runs 1, 2, 4, 5, 6 and
-7 at plan time, before any reviewer is dispatched.
+7 at plan time, before any reviewer is dispatched, and adds two report-only
+lines of its own: `SECTION`, when a graded section's heading matches nothing so
+the hash cannot see it, and `SKIPPED`, when a citation does not resolve to one
+file. Neither counts toward its exit code — a `SECTION` is drift worth knowing
+about and a `SKIPPED` is not something editing the spec fixes.
 
 ### 3. The coverage counter-check
 

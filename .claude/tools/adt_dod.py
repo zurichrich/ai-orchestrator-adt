@@ -1257,6 +1257,11 @@ def ungraded_sections(ticket_md_path):
     carried a suffix, and nothing said so because a section that matches nothing
     is simply `continue`d. Only for a ticket that HAS a `## Plan (PM)`; a brief
     with no spec is not missing anything.
+
+    A PARTIAL match is the signal. Zero matches is a different plan shape rather
+    than drift — `/adt-plan-fasttrack` legitimately writes a `## Plan (PM)` with
+    no `###` subsections at all, and reporting "0 of 6" on every fast-track
+    ticket is how a check trains people to ignore it (QA finding 1).
     """
     try:
         text = open(ticket_md_path, encoding="utf-8").read()
@@ -1265,7 +1270,7 @@ def ungraded_sections(ticket_md_path):
     if "## Plan (PM)" not in text:
         return []
     missing = [n for n in GRADED_SECTIONS if graded_section(text, n) is None]
-    if not missing:
+    if not missing or len(missing) == len(GRADED_SECTIONS):
         return []
     return [("SECTION",
              "the graded-text hash covers %d of %d sections: no heading matches "
@@ -1380,7 +1385,11 @@ def _cli(argv):
         # recording is never lost to a diagnostic, and both are reports rather
         # than refusals: the first is about the reviewer's prose, which the author
         # cannot edit, and the second is a question for the human.
-        phrase = undeclared_justification(args.ticket_md, args.record_verdict)
+        # Coverage only. `rests_on` is a coverage mechanism by design, and the
+        # plan-quality reviewer's template was never taught to emit the line, so
+        # asking for it there warns on every correct SOUND verdict (QA finding 3).
+        phrase = (undeclared_justification(args.ticket_md, "coverage")
+                  if args.record_verdict == "coverage" else None)
         if phrase:
             print("NOTE\t%s passed something on the grounds that %r, and "
                   "declared no dependency. Ask the reviewer for a "
@@ -1398,8 +1407,15 @@ def _cli(argv):
         found = authoring_defects(args.ticket_md)
         for code, msg in found:
             print("%-8s %s" % (code, msg))
-        if not found:
-            print("CLEAN\tno authoring defects in %s" % args.ticket_md)
+        # SKIPPED is not a defect: it names a citation the checker could not
+        # resolve, which is not something editing the spec fixes. `--gate`
+        # already ignores it, and commands/plan.md says so in the same words, so
+        # counting it here made the playbook's own check unsatisfiable (QA
+        # finding 2).
+        defects = [f for f in found if f[0] != "SKIPPED"]
+        if not defects:
+            if not found:
+                print("CLEAN\tno authoring defects in %s" % args.ticket_md)
             return 0
         if not in_plan_lane(args.ticket_md):
             # Past the plan lanes this is a report, not a failure. A borrow span
@@ -1407,6 +1423,7 @@ def _cli(argv):
             # change the spans go stale by design — exiting 1 there would hand a
             # session a red it cannot clear, which is the opposite of what the
             # flag is for.
+            # (`defects` is computed above; the message counts findings, not it.)
             print("NOTE\tthis ticket is past the plan lanes, so the findings "
                   "above are reported and not counted: a borrows: span describes "
                   "code the diff has since moved.")
@@ -1843,11 +1860,23 @@ def reopened_dependencies(ticket_md_path):
         mine = _records(rows, gate)
         if not mine:
             continue
-        last = mine[-1]
-        # Only the LAST row per gate. An earlier row's dependency was either
-        # re-stated by the round that followed it or dropped on purpose, and
-        # reopening a superseded verdict asks for a review of text nobody holds.
-        if last.get("hash") == now:
+        # The newest row that DECLARED something, not simply the newest row.
+        # A delta re-review writes `**Depends-on-unmodified:** none`, which the
+        # reviewer's own template instructs it to do when that round rests on
+        # nothing — and reading only the last row let that erase a real
+        # declaration made two rounds earlier. AO-006's actual sequence was a
+        # declaration in round 3 followed by delta re-reviews in 4 and 5 and the
+        # code change in 6, so the last-row rule missed the incident this
+        # mechanism was built from (QA finding 7).
+        #
+        # The HASH still comes from the newest row: the question is whether the
+        # spec has moved since anyone last looked, and the newest verdict is when
+        # anyone last looked.
+        declared = [r for r in mine if (r.get("rests_on") or "").strip()]
+        if not declared:
+            continue
+        last, seen_at = declared[-1], mine[-1]
+        if seen_at.get("hash") == now:
             continue
         for item in (last.get("rests_on") or "").replace(",", " ").split():
             # FILE granularity, and the limit is worth naming. At plan time

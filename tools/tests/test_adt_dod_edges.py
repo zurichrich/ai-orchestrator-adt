@@ -180,6 +180,13 @@ def _backoff_due(now, quiet):
 
 def _save_state(cfg, quiet):
     cfg["quiet"] = quiet
+
+
+def _with_nested(rows):
+    """One exit of its own; the inner return belongs to the inner function."""
+    def _key(row):
+        return row["at"]
+    return sorted(rows, key=_key)
 '''
 
 
@@ -231,6 +238,23 @@ def test_a_function_with_no_returns_declares_none(tmp_path):
     md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:9-10` "
                                "`_save_state` — exits none — it writes the "
                                "whole dict and returns nothing at all.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_a_return_inside_a_nested_def_is_not_this_functions_exit(tmp_path):
+    """`_with_nested` is 13-17 with ONE exit of its own, at 17. The inner
+    `return` at 15 is `_key`'s. Counting it would fail a correct declaration,
+    and nothing else in the suite has a nested function to notice."""
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:13-17` "
+                               "`_with_nested` — exits 17 — the rows in the "
+                               "order the caller depends on.")
+    assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_the_nested_functions_own_exit_is_graded_against_the_nested_function(tmp_path):
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:15-16` "
+                               "`_key` — exits 16 — the sort key, which the "
+                               "outer function does not expose.")
     assert adt_dod.borrow_defects(md, root=repo) == []
 
 

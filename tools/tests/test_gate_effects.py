@@ -471,6 +471,58 @@ class DeclaredDependencyTest(unittest.TestCase):
             self.assertIn("recorded and not enforced", r2.stderr)
 
 
+    def test_a_later_none_does_not_erase_an_earlier_declaration(self):
+        """AO-006's actual sequence, and the one the last-row rule missed: a
+        declaration, then a delta re-review that rests on nothing and writes
+        `none` as its own template instructs, then the spec starts editing that
+        file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp, blocks=DEP)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read() + (
+                "### DoD-coverage review\n**Verdict:** COVERED\n"
+                "**Depends-on-unmodified:** none\n")
+            open(t, "w", encoding="utf-8").write(body)
+            adt_dod.record_verdict(t, "coverage")
+            body = open(t, encoding="utf-8").read().replace(
+                "- 1a [backend] — do the thing",
+                "- 1a [backend] — edit tools/adt_watch.py")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.reopened_dependencies(t)
+            self.assertEqual(
+                out, [("coverage", 1, "tools/adt_watch.py:_save_watch_state")],
+                "the round-1 declaration still stands; round 2 rested on nothing")
+
+
+class UngradedSectionTest(unittest.TestCase):
+    def test_a_plan_missing_some_graded_sections_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            body = open(t, encoding="utf-8").read().replace("### Risks", "### Hazards")
+            open(t, "w", encoding="utf-8").write(body)
+            out = adt_dod.ungraded_sections(t)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("`### Risks`", out[0][1])
+
+    def test_a_plan_with_no_graded_sections_at_all_is_not_drift(self):
+        """A fast-track plan legitimately has a `## Plan (PM)` and no `###`
+        subsections. Reporting `0 of 6` on every one of those is how a check
+        teaches people to ignore it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            head = open(t, encoding="utf-8").read().split("## Plan (PM)")[0]
+            open(t, "w", encoding="utf-8").write(
+                head + "## Plan (PM)\n\nA one-line fix, no sections.\n")
+            self.assertEqual(adt_dod.ungraded_sections(t), [])
+
+    def test_a_ticket_with_no_plan_is_not_missing_anything(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = ticket(tmp)
+            head = open(t, encoding="utf-8").read().split("## Plan (PM)")[0]
+            open(t, "w", encoding="utf-8").write(head)
+            self.assertEqual(adt_dod.ungraded_sections(t), [])
+
+
 class DivergenceTest(unittest.TestCase):
     def test_two_consecutive_negative_plan_quality_verdicts_print_escalate(self):
         with tempfile.TemporaryDirectory() as tmp:

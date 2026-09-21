@@ -157,13 +157,33 @@ out="$(run "$T")"
 counted "$out" && bad "a pytest-backed pass-claim was flagged by (e): $out" \
                 || ok "pass-claim left to check (c) -> not flagged by (e)"
 
-# e7. A file:line citation and a ticket id are references, not measurements.
+# e7. A sentence whose only number IS a reference carries no quantity at all.
 T="$TMP/e7.jsonl"; : > "$T"
 user_text "where" "$T"
-asst_text "All three sentinels are at tools/adt_watch.py:404, every one in AO-006." "$T"
+asst_text "Every marker is at tools/adt_watch.py:404." "$T"
 out="$(run "$T")"
 counted "$out" && bad "a citation-only sentence was read as a counted claim: $out" \
-                || ok "file:line and ticket id excluded -> not flagged"
+                || ok "a number that is only a citation -> not flagged"
+
+# e8. The regression QA found: the skip used to exempt the whole sentence, so a
+# trailing ticket id switched the check off. A ticket id is close to a habit in
+# this repo's prose, so that hole was most of the check's reach.
+T="$TMP/e8.jsonl"; : > "$T"
+user_text "did the markers survive" "$T"
+asst_bash "grep -n 'marker' tools/adt_sync.py" "$T"
+asst_text "There are 9 distinct markers, all ok (AO-006)." "$T"
+out="$(run "$T")"
+counted "$out" && ok "a trailing ticket id no longer exempts the sentence -> flagged" \
+                || bad "a ticket id still switches the check off: $out"
+
+# e9. Same, for a file:line reference sitting beside a real count.
+T="$TMP/e9.jsonl"; : > "$T"
+user_text "how many" "$T"
+asst_bash "grep -n 'marker' tools/adt_sync.py" "$T"
+asst_text "All 9 markers survived, per tools/adt_sync.py:146." "$T"
+out="$(run "$T")"
+counted "$out" && ok "a file:line beside a real count -> still flagged" \
+                || bad "a citation still switches the check off: $out"
 
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
