@@ -121,10 +121,13 @@ The lanes above say *when* a gate fires. What each one **checks** is designed
 around one problem: every check ADT had once took the agent's own output as its
 input.
 
-- **plan → build** — `adt-dod.sh --gate` now refuses five things, not two: no
+- **plan → build** — `adt-dod.sh --gate` now refuses seven things, not two: no
   `done_evidence`, a prose condition, **no independent DoD-coverage review** (or
-  a `GAP`/`UNKNOWN` verdict), **an unattached caveat**, and **a dependency
-  defect** (a cycle or a dangling `depends_on`).
+  a `GAP`/`UNKNOWN` verdict), **an unattached caveat**, **a dependency
+  defect** (a cycle or a dangling `depends_on`), **a `borrows:` declaration that
+  does not match the source**, and **a recorded verdict whose declared
+  dependency the spec has moved past**. The last two refuse in the plan lanes
+  and report elsewhere, since a borrow span describes pre-diff code.
 - **at plan time, what the gates DID is recorded** — each counter-check verdict
   is followed by `adt_dod --record-verdict <gate>`, which appends the round, the
   verdict and the **graded-text hash** to `gate_effects:` frontmatter. `ran` and

@@ -27,6 +27,17 @@ actually ran or read *in that turn*, or it is not made.
 
 Enforced by **`defaults/hooks/adt-phrase-linter.sh`** (a `Stop` hook), which pairs a
 
+**Warn-only, alongside the two enforced rules: the counted claim (AO-013).**
+`adt-phrase-linter.sh` check (e) flags a counted or completeness claim whose command cannot support it —
+a sentence carrying both a quantity and a completeness word in a turn where
+nothing counted anything. Two such claims shipped in one AO-006 session, "9
+distinct markers, all ok" from a grep that stopped at newlines and "the only two
+remaining mentions" from a three-phrase grep that never counted mentions, and a
+reviewer caught both. The standard is working-style #13; `/adt-brief` has
+required it of `rnd-*` research notes for longer, and this is the same rule for
+every report. What counts as counting includes `len(` inside an inline `python3`
+script, because that is how this project's own counts are usually produced.
+
 **Warn-only, alongside the two enforced rules: the write budget (ADT-260).**
 `adt-phrase-linter.sh` also flags a ticket log entry longer than 12 lines. It is a
 WARNING, not a denial. Not because it could not: exit 2 on a Stop hook blocks the stop and hands stderr back as the reason, which is what `adt-close-complete.sh` does (ADT-336). This one warns because refusing prose on length
@@ -110,14 +121,27 @@ error) and fail closed only on a check that actually ran.
 
 ## The plan-side gates
 
-`adt-dod.sh <ticket.md> --gate` refuses a plan before a build starts, for five
-reasons — the last three are new:
+`adt-dod.sh <ticket.md> --gate` refuses a plan before a build starts, for seven reasons — the last two are new:
 
 1. **No `done_evidence`** — nothing to grade.
 2. **A prose condition** — the grader can't decide it.
 3. **No `### DoD-coverage review`, or a `GAP`/`UNKNOWN` verdict.**
 4. **An unattached caveat.**
 5. **A dependency defect** — a dangling `depends_on` or a cycle.
+6. **A `borrows:` declaration that does not match the source** (AO-013) — the
+   declared span is not the function's span, or the declared exit lines are not
+   its `return`s. A Design that cites a line inside a function and declares
+   nothing is the same defect.
+7. **A recorded verdict whose declared dependency the spec has moved past**
+   (AO-013) — the graded text changed since that verdict was recorded and the
+   file it named is still in the sub-steps.
+
+**6 and 7 refuse only while the ticket is in `ideas/` or `planned/`; elsewhere
+they print a NOTE on stderr.** A borrow declaration describes the code as it was
+before the diff, so it goes stale the moment the build lands and a refusal at
+release would fail a correct ticket. The lane is read from the folder, not from
+`stage:`, which can lag it by a tick. `--check-authoring` runs 1, 2, 4, 5, 6 and
+7 at plan time, before any reviewer is dispatched.
 
 ### 3. The coverage counter-check
 

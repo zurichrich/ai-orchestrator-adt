@@ -280,6 +280,7 @@ gate_effects:
     round: 3
     verdict: FLAWED
     hash: <graded-text hash>
+    rests_on: tools/adt_watch.py:_save_watch_state   # optional; see below
   - kind: derived           # rewritten from the records; never clobbers them
     gate: plan-quality
     ran: 3
@@ -297,7 +298,11 @@ BOTH gates after any rewrite, so that would credit the coverage gate for a
 plan-quality fix.
 
 The **graded-text hash** covers every `###` section the plan-quality reviewer
-reads plus `done_evidence`, whitespace-normalised so a reflow is not an edit. It
+reads plus `done_evidence`, whitespace-normalised so a reflow is not an edit. A
+heading is matched with an optional parenthetical suffix, so the template's
+`### Sub-steps  (DERIVED from Design + Impact — not invented)` counts (AO-013 1g:
+before that, no ticket's sub-steps were ever in the hash). A section ends at the
+next `###` or the next `##`, which keeps an appended build-log line out of it. It
 is computed by `adt_dod`, never by an agent, and written at verdict time —
 the cache is outside every git checkout, so an unstamped round is unrecoverable.
 
@@ -307,6 +312,21 @@ latter would credit a gate nobody measured. It does not refuse: a dispatch that
 legitimately produces no block (an interrupted reviewer, an `UNKNOWN` verdict)
 would otherwise make the ticket permanently un-releasable with no reconciliation
 path. Under-crediting is the conservative direction.
+
+`rests_on` is the file:symbol list a coverage verdict rests on staying unmodified (AO-013).
+It is written only when the reviewer's block carries a
+`**Depends-on-unmodified:**` line, so an absent key and a verdict that assumes
+nothing stay distinguishable. `reopened_dependencies()` reports a dependency in
+doubt when the graded text has moved since that row was written AND the file is
+still named by the current `### Sub-steps` — one half alone is a typo in Risks or
+a spec nobody has touched. Only the LAST row per gate is checked: an earlier
+row's dependency was either re-stated by the round that followed it or dropped on
+purpose. `--record-verdict` prints a NOTE when a block uses a justification
+phrase ("existing, unmodified code", "needs no test") and declares nothing.
+
+Before this key, AO-006's round-3 coverage verdict passed an obligation because
+the code behind it was not changing, round 6 modified that code, and nothing
+reopened the verdict.
 
 `gating_enabled` is RECORDED rather than re-evaluated at report time.
 `plan_gating_enabled()` is global and per-run, so a report generated after the

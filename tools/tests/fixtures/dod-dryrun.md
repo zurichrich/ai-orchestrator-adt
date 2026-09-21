@@ -8,7 +8,7 @@ done_evidence:
   - must_run: bash tools/tests/fixtures/no_such_test_written_yet.sh
     lane: build
   - must_run: test -f README.md
-    was_red_at: f962f15b84e1f066ba7e3809a677368215759533
+    was_red_at: 4f13107f940e5c499edca658c48281c123444ef2
     lane: build
 ---
 
@@ -29,4 +29,9 @@ has a DoD authoring defect.
    is true now, which `--dry-run` flags as ALREADY-GREEN.
 
 Conditions 1 and 2 work from any directory. Condition 3 needs a git repo to
-replay the pin.
+replay the pin, and the pin must be a commit THIS repo has. It used to be
+`f962f15`, from the history that preceded the public release, so `_was_red_at`
+returned can't-verify, no ALREADY-GREEN flag was ever raised, and two tests here
+were red on `main` (AO-013 5d). Re-pinned to the initial public commit, where
+`test -f README.md` also passes — which is what makes the condition
+always-green and the flag fire.

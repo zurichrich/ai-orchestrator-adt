@@ -106,9 +106,29 @@ settled when nothing checked it. If you find nothing, say what you checked.
 ### DoD-coverage review
 **Verdict:** COVERED | GAP | UNKNOWN
 **Reviewed:** <ticket id> — <n> obligations vs <m> conditions
+**Depends-on-unmodified:** <file>:<symbol>, ... (or "none")
 **Gaps:**
 - <obligation> — <gap class> — expected: <the condition that should exist>
 - ... (or "none")
 **Checked and found covered:** <the 2-3 you most suspected>
 **Notes:** <one line, or "none">
 ```
+
+### `**Depends-on-unmodified:**` — what your verdict rests on
+
+Whenever you pass an obligation on the grounds that the code behind it is not
+changing, name that code here as `<file>:<symbol>`. Nothing else in the lane
+records it, and a verdict nobody can invalidate is the failure this line exists
+to stop.
+
+AO-006 round 3 passed "a rate-limited tick correctly goes red" without a
+condition, because it was a property of existing, unmodified code. That was true
+when written. Round 6's design modified exactly that code, three rounds later,
+and nothing reopened the verdict — it survived because the operator thought to
+ask. `adt_dod.py` now reads this line, stores it on the recorded row, and reopens
+the dependency when the spec moves while still editing that file.
+
+Write `none` when your verdict rests on no such assumption. Do not leave the line
+out: a missing line and a verdict that genuinely assumes nothing are different
+facts, and `--record-verdict` prints a NOTE when it sees a justification phrase
+with no declaration behind it.
