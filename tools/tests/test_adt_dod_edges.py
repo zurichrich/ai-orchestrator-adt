@@ -256,3 +256,38 @@ def test_an_unresolvable_citation_fails_open(tmp_path):
     md, repo = _repo(tmp_path, "- borrows: `tools/absent.py:1-6` `_gone` — "
                                "exits 4 — a deadline.")
     assert adt_dod.borrow_defects(md, root=repo) == []
+
+
+def test_a_borrow_defect_refuses_in_planned_and_only_notes_in_building(tmp_path):
+    """The lane scoping, both directions, through the CLI.
+
+    `--gate` resolves a citation against the git toplevel of the directory it is
+    invoked from, so the subprocess runs in the fixture repo — the same way a
+    planning session runs it in the tree it is planning against.
+    """
+    import shutil
+    import subprocess
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-4` "
+                               "`_backoff_due` — exits 4 — a deadline.",
+                     lane="planned")
+    dod = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(adt_dod.__file__))), "tools", "adt_dod.py")
+    args = [sys.executable, dod, "--gate"] + _NO_PLAN_GATE
+
+    r = subprocess.run(args[:2] + [md] + args[2:], cwd=repo,
+                       capture_output=True, text=True)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "REFUSE" in r.stdout and "not traced to the end" in r.stdout, r.stdout
+
+    # The same ticket one lane on: reported on stderr, and approvable. A borrow
+    # span describes the code BEFORE the diff, so once the build lands its own
+    # change the span is stale by design and a refusal here would be wrong.
+    building = tmp_path / "cache" / "building"
+    building.mkdir(parents=True)
+    moved = str(building / "ticket.md")
+    shutil.move(md, moved)
+    r2 = subprocess.run(args[:2] + [moved] + args[2:], cwd=repo,
+                        capture_output=True, text=True)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "APPROVABLE" in r2.stdout, r2.stdout
+    assert "recorded and not enforced" in r2.stderr, r2.stderr
