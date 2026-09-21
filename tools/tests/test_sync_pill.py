@@ -260,9 +260,14 @@ def test_render_independent_of_window(tmp_path, monkeypatch):
     assert fresh_n == stale_n, (
         "the page differs by more than the epoch: the renderer is deciding "
         "state that only the browser may decide")
+    # The BUTTON must carry no state class. The stylesheet legitimately defines
+    # .sync-on/.sync-off, so assert on the element, not on the page.
     for page in (fresh, stale):
-        assert "sync-on" not in page and "sync-off" not in page, (
-            "a state class was baked into the HTML")
+        tag = re.search(r'<button[^>]*id="board-sync"[^>]*>', page)
+        assert tag, "the pill was not rendered"
+        cls = re.search(r'class="([^"]*)"', tag.group(0)).group(1)
+        assert cls.split() == ["sync-pill"], (
+            f"a state class was baked into the HTML: class={cls!r}")
 
 
 def test_rendered_board_carries_the_window(tmp_path, monkeypatch):
@@ -288,3 +293,27 @@ def test_missing_window_hides_pill(tmp_path, monkeypatch):
     monkeypatch.setattr(build_kanban.sys, "platform", "win32")
     page = _page(tmp_path, healthy_until=1_700_000_000)
     assert 'id="board-sync"' not in page
+
+
+# ── 1e: the pill's CSS, in both themes and at the breakpoint ────────────────
+
+def test_pill_css_uses_tokens_and_both_themes():
+    css = build_kanban.HTML_CSS
+    for sel in (".sync-pill {", ".sync-pill.sync-on", ".sync-pill.sync-off",
+                ".sync-pill::after", ".sync-dot", ".sync-pill:focus-visible"):
+        assert sel in css, f"missing rule: {sel}"
+
+    block = css[css.index("/* AO-006 sync pill"):
+                css.index(".sync-pill.sync-off .sync-dot")]
+    # Theme tokens only: a literal colour here would be light-mode-only, and the
+    # board has a dark theme that redefines --card/--line/--text/--bug.
+    assert not re.findall(r"#[0-9a-fA-F]{3,6}", block), "hardcoded hex in the pill rules"
+    assert not re.findall(r"\brgba?\(", block), "hardcoded rgb/rgba in the pill rules"
+    for tok in ("var(--card)", "var(--line)", "var(--text)", "var(--p2)",
+                "var(--bug)", "var(--bug-strong)"):
+        assert tok in block, f"pill does not use {tok}"
+
+    # The 44px hit area, and the breakpoint the other nowrap badges already use.
+    assert "min-width: 44px" in css and "min-height: 44px" in css
+    narrow = css[css.index("@media (max-width: 480px)"):]
+    assert ".sync-pill { white-space: normal; }" in narrow

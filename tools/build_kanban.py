@@ -1516,6 +1516,9 @@ h1 { font-size: 18px; margin: 0 0 4px; }
 @media (max-width: 480px) {
   .rate-badge { white-space: normal; }
   .hdr-right { margin-left: 0; min-width: 0; }
+  /* Same reason as .rate-badge: a nowrap child overflows its shrunk parent and
+     scrolls the page sideways. The pill wraps WITH .gen-at, never away from it. */
+  .sync-pill { white-space: normal; }
 }
 /* ADT-165: same shape as .rate-badge — no font-size, so it inherits 11px from
    .hdr-right (see the note above; a font-size here would win over the
@@ -1526,6 +1529,45 @@ h1 { font-size: 18px; margin: 0 0 4px; }
 @media (max-width: 480px) { .prot-badge { white-space: normal; } }
 .prot-badge.prot-ok { color: var(--muted); }
 .prot-badge.prot-warn { color: #d44; }
+/* AO-006 sync pill. Deliberately shaped like .rate-badge/.prot-badge: 11px/600,
+   nowrap, no declared font-size beyond the one it needs (it sits in the h1, not
+   .hdr-right, so it must state its own — see the ADT-153 note above for why a
+   declared size wins over an inherited one). */
+.sync-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 8px; padding: 3px 9px;
+  font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+  color: var(--text); background: var(--card);
+  border: 1px solid var(--line); border-radius: 999px;
+  white-space: nowrap; cursor: pointer; position: relative;
+  vertical-align: baseline;
+}
+.sync-pill:hover { background: var(--code-bg); border-color: var(--muted); }
+.sync-pill:focus-visible { outline: 2px solid var(--p1); outline-offset: 2px; }
+/* The visible pill is ~21px tall, well under the 44px touch minimum. A
+   transparent ::after grows the HIT area without moving anything on the line. */
+.sync-pill::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px; min-height: 44px;
+}
+.sync-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted); flex: none;
+}
+/* The dot carries the state; the label says it in words, so colour is never the
+   only channel. The label colour is a TEXT colour that clears 4.5:1 at 11px —
+   the dot's green does not, which is why it is never used on text. */
+.sync-pill.sync-on .sync-dot {
+  background: var(--p2);
+  /* Derived from the token, not a copy of its value: a literal rgba here would
+     drift the moment --p2 changed, and nothing would report it. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--p2) 18%, transparent);
+}
+.sync-pill.sync-off {
+  color: var(--bug-strong); background: var(--bug); border-color: var(--bug-strong);
+}
+.sync-pill.sync-off .sync-dot { background: var(--bug-strong); }
 .rate-badge.rate-ok { color: var(--muted); }
 .rate-badge.rate-warn { color: #c77; }
 .rate-badge.rate-crit { color: #d44; }
