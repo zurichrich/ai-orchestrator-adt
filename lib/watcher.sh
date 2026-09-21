@@ -4,19 +4,25 @@
 # Per-project board-sync watcher — install/uninstall.
 #
 # ADT's board only stays in sync with GitHub Issues if SOMETHING runs
-# `adt_watch.py --once` on an interval. Before this, the installer rendered the
+# `adt_watch.py` on an interval. Before this, the installer rendered the
 # board exactly once and printed a "run this yourself" hint, so every project
 # started with a dead sync — a board move never reached GitHub until a human
 # manually ran the watch. A watcher must exist for EVERY project ADT runs in;
 # the installer now creates one, and the uninstaller removes it.
 #
-# It calls `adt_watch.py --root <project> --once` directly (the same config-aware
-# render+sync path the installer already invokes once), so there is no per-project
-# wrapper script to author or keep in step. --once on an interval (not a resident
-# loop) means a hung/crashed pass is replaced on the next tick rather than wedging
-# a permanently-resident process.
+# It calls `adt_watch.py --root <project> --interval <n>` directly (the same
+# config-aware render+sync path the installer already invokes once), so there is
+# no per-project wrapper script to author or keep in step.
 #
-# Platform: macOS → launchd user agent; Linux → systemd --user timer. Anything
+# RESIDENT since AO-006, on both platforms. It was `--once` on a timer,
+# deliberately: a hung pass was replaced on the next tick rather than wedging a
+# permanent process. The board's stop/start button POSTs to this process, and a
+# --once tick is gone between ticks, so there was nothing alive to take the
+# click. The cost is real and unmitigated: a wedged pass now stays wedged.
+# adt_sync's pass lock keeps that safe rather than corrupting, but nothing
+# watches for a stall yet.
+#
+# Platform: macOS → launchd user agent; Linux → systemd --user service. Anything
 # else → warn + skip (the manual `adt watch` hint still applies). All functions
 # are idempotent. On macOS a reinstall leaves an identical, loaded agent alone
 # and replaces one that differs; on Linux it always replaces. Re-uninstalling is
@@ -214,32 +220,37 @@ EOF
       local unit="adt-watch-$slug"
       local ud="$HOME/.config/systemd/user"
       mkdir -p "$ud"
+      # AO-006: resident here too, for the same reason as launchd — the board's
+      # stop/start button POSTs to this process, and a oneshot+timer is gone
+      # between ticks. A long-running service replaces the pair, so the .timer
+      # is now removed rather than written.
       cat > "$ud/$unit.service" <<EOF
 [Unit]
 Description=ADT board sync for $name (cache <-> GitHub Issues + kanban render)
 
 [Service]
-Type=oneshot
+Type=simple
 WorkingDirectory=$path
 Environment=PATH=$(_watcher_path)
-ExecStart=$py $watch --root $path --once
-EOF
-      cat > "$ud/$unit.timer" <<EOF
-[Unit]
-Description=Run ADT board sync for $name every ${interval}s
-
-[Timer]
-OnBootSec=${interval}
-OnUnitActiveSec=${interval}
-AccuracySec=5
+ExecStart=$py $watch --root $path --interval ${interval}
+Restart=always
+RestartSec=5
 
 [Install]
-WantedBy=timers.target
+WantedBy=default.target
 EOF
+      # Leave no orphaned timer from a pre-AO-006 install: it would keep firing
+      # the oneshot alongside the resident service, and two passes would fight
+      # over the pass lock every ${interval}s.
+      if [[ -f "$ud/$unit.timer" ]]; then
+        systemctl --user disable --now "$unit.timer" 2>/dev/null || true
+        rm -f "$ud/$unit.timer"
+        echo "  [watcher] removed the pre-AO-006 $unit.timer (the service is resident now)" >&2
+      fi
       systemctl --user daemon-reload 2>/dev/null || true
-      systemctl --user enable --now "$unit.timer" 2>/dev/null \
-        && echo "  installed systemd --user watcher: $unit.timer (every ${interval}s)" \
-        || echo "  (systemd --user not active — enable later: systemctl --user enable --now $unit.timer)" >&2
+      systemctl --user enable --now "$unit.service" 2>/dev/null \
+        && echo "  installed systemd --user watcher: $unit.service (resident, ${interval}s loop)" \
+        || echo "  (systemd --user not active — enable later: systemctl --user enable --now $unit.service)" >&2
       return 0
       ;;
     *)
@@ -262,6 +273,10 @@ uninstall_watcher() {
     local ud="$HOME/.config/systemd/user"
     if [[ -f "$ud/$unit.timer" || -f "$ud/$unit.service" ]]; then
       systemctl --user disable --now "$unit.timer" 2>/dev/null || true
+      # AO-006: the service is RESIDENT now, so deleting its unit file does not
+      # stop it — the process would run until reboot. Disable it too. The timer
+      # line stays for a pre-AO-006 install that still has one.
+      systemctl --user disable --now "$unit.service" 2>/dev/null || true
       rm -f "$ud/$unit.timer" "$ud/$unit.service"
       systemctl --user daemon-reload 2>/dev/null || true
       echo "  [uninstall] removed systemd --user watcher: $unit"
