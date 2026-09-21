@@ -8,7 +8,9 @@
 #       works") in a turn that never opened a .adt/ HTML file;
 #   (c) a claim that a test or command passed when no matching command ran in
 #       the turn;
-#   (d) a ticket log entry written this turn that is longer than the budget.
+#   (d) a ticket log entry written this turn that is longer than the budget;
+#   (e) a counted or completeness claim with no counting command behind it
+#       (AO-013 gap 3 — working-style #13).
 #
 # A Stop hook gets metadata, not the message text, so it reads transcript_path
 # from stdin and parses the current turn's text and tool calls itself. It only
@@ -182,6 +184,39 @@ if PASS_CLAIM.search(last_text):
             "a claim that something passed, but %s. Run it and cite the result, "
             "or drop the claim (working-style #10: never guess - act only on "
             "verified data)." % detail)
+
+# (e) A counted or completeness claim with no counting command behind it
+# (AO-013 gap 3, working-style #13). Two failures in one AO-006 session: "9
+# distinct markers, all ok" reported from a grep that stopped at newlines, and
+# "the only two remaining mentions" from a three-phrase grep that never counted
+# mentions. Both were single sentences carrying a quantity AND a completeness
+# word, and neither turn ran anything that counts.
+#
+# Both halves are required IN THE SAME SENTENCE. A number on its own is a line
+# reference or a ticket id; a completeness word on its own is ordinary prose.
+# Requiring the pair is what keeps this off the rest of a report.
+COUNT_QTY = re.compile(
+    r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+"
+    r"(?:[\w./-]+\s+){0,2}[a-z][\w/-]*s\b", re.IGNORECASE)
+COUNT_ALL = re.compile(r"\b(?:all|every|only|none|exactly|each)\b", re.IGNORECASE)
+# What counts as counting. `len(` is here because an inline `python3 -` script is
+# how this project's own counts are usually produced; without it the check fires
+# on correctly verified work, and a check that fires on correct work is one that
+# gets worked around.
+COUNTING = re.compile(
+    r"\bwc\b|\bgrep\b[^|;&]*\s-[A-Za-z]*c\b|--count\b"
+    r"|\buniq\b[^|;&]*-c\b|\bnl\b|\blen\(", re.IGNORECASE)
+
+claims = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n", last_text)
+          if COUNT_QTY.search(s) and COUNT_ALL.search(s)]
+if claims:
+    joined = " ".join(turn_bash_cmds)
+    if not COUNTING.search(joined):
+        msgs.append(
+            "a counted or completeness claim whose command cannot support it: %r. "
+            "No command in this turn counted anything (wc, grep -c, uniq -c, "
+            "--count, nl, len(). Cite the command that produced the number, or "
+            "drop the claim (working-style #13)." % claims[0][:120])
 
 if msgs:
     print(json.dumps({"systemMessage": "⚠ working-style.md: " + " | ".join(msgs)}))
