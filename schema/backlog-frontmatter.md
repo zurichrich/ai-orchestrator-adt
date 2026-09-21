@@ -321,8 +321,18 @@ doubt when the graded text has moved since that row was written AND the file is
 still named by the current `### Sub-steps` — one half alone is a typo in Risks or
 a spec nobody has touched. Only the LAST row per gate is checked: an earlier
 row's dependency was either re-stated by the round that followed it or dropped on
-purpose. `--record-verdict` prints a NOTE when a block uses a justification
-phrase ("existing, unmodified code", "needs no test") and declares nothing.
+purpose. `--record-verdict` prints a NOTE when a block carries no
+`**Depends-on-unmodified:**` line at all, and names the justification phrase when
+the block also uses one ("existing, unmodified code", "needs no test").
+
+The match is on the FILE, not the symbol, and the limit is worth knowing. At plan
+time nothing has been built, so "the diff touches that code" is not observable —
+the only available signal that the spec now INTENDS to touch it is the spec's own
+work-set. So this narrows across dependencies (one naming a file the sub-steps
+never mention does not fire) and not within a file: on a ticket that edits the
+declared file throughout, the second half is always true and the rule reduces to
+"the graded text moved". The symbol is carried into the message, so the reviewer
+is asked about the right thing even where the test could not be.
 
 Before this key, AO-006's round-3 coverage verdict passed an obligation because
 the code behind it was not changing, round 6 modified that code, and nothing

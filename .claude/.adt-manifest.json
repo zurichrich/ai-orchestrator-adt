@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.2.0",
-  "source_commit": "7ae5b8584f311a7a89d3683e7e27baf24c2598fd",
+  "source_commit": "8f794ca1d8bdc521da1ca66de0024034ada1a7dd",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
