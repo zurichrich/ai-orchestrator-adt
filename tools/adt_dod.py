@@ -16,6 +16,7 @@ The cardinal rule (the brief's safety constraint): **no agent narration is ever
 an input.** Every condition is a regex match against a rendered file or a
 process exit code — something external to the agent's say-so.
 """
+import ast
 import os
 import re
 import subprocess
@@ -960,6 +961,247 @@ def dependency_defects(ticket_md_path):
     return out
 
 
+# ── AO-013 gap 1: a borrowed value is traced to the end of its function ──────
+# AO-006 replaced four designs and three failed the same way: a value produced
+# inside `adt_watch.py`'s tick loop was reused to mean something it does not mean
+# at the source. Every one was discoverable by reading a single function to its
+# end — `_backoff_due`'s eager `return 0.0` sat four lines below code the spec had
+# already quoted. `commands/plan.md` said "understand the existing code first" and
+# required no artifact, so nothing could tell a complete read from a partial one.
+#
+# A Design bullet that depends on an existing value now declares it:
+#
+#   - borrows: `tools/adt_watch.py:387-406` `_backoff_due` — exits 404, 406 —
+#     0.0 at 404 is gate 1's "run eagerly" sentinel, not a timestamp.
+#
+# and this asserts the two halves a partial read gets wrong: the declared span is
+# the function's real span, and the declared exit lines are every `return`
+# directly inside it. Both come from `ast`, so neither is a judgement call.
+#
+# WHY NOT "every file.py:NN citation must span its whole function", which would
+# need no new convention: measured against AO-006's own Design, it flagged 10 of
+# 15 citations — including a 141-line function and two off-by-one spans — on a
+# spec that ended SOUND. A check that fires on two thirds of correct work gets
+# worked around, which is the reasoning `_CAVEAT_MARKERS` already records.
+#
+# Python only. All four AO-006 failures were Python, `ast` gives exact spans with
+# no dependency, and a shell function needs a heuristic that would have to be
+# right to be worth having.
+_BORROW_NONE = re.compile(r"^none\b", re.IGNORECASE)
+_BORROW_SPEC = re.compile(
+    r"`?(?P<path>[A-Za-z_][\w./-]*\.py):(?P<start>\d+)-(?P<end>\d+)`?\s+"
+    r"`?(?P<sym>[A-Za-z_][\w.]*)`?\s*(?:—|--|-)\s*"
+    r"exits\s+(?P<exits>none|\d[\d,\s]*)", re.IGNORECASE)
+# A citation of ONE line, or of a range: what the second arm scans for.
+_PY_CITATION = re.compile(r"`?([A-Za-z_][\w./-]*\.py):(\d+)(?:-(\d+))?`?")
+_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", ".claude"}
+
+
+def _repo_root(start=None):
+    """The git toplevel of `start` (default: cwd), or None outside a repo.
+
+    Deliberately NOT `_default_cwd`: that one takes `devteam` and falls back to
+    its parent, which is the right answer for running a condition and the wrong
+    one here — a borrow citation resolves against the tree being planned, or it
+    does not resolve at all.
+    """
+    try:
+        r = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                           cwd=start, capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_py(path, root):
+    """The file a citation names, or None when it does not resolve UNIQUELY.
+
+    A spec cites `adt_watch.py`, not `tools/adt_watch.py`, so a basename search
+    is required. It fails open on ambiguity: `.claude/` holds installed copies of
+    several tools, so a basename can legitimately match twice, and refusing a
+    plan over which copy was meant would be a gate nobody can satisfy.
+    """
+    direct = os.path.join(root, path)
+    if os.path.isfile(direct):
+        return direct
+    base, hits = os.path.basename(path), []
+    for dirpath, dirnames, files in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        if base in files:
+            hits.append(os.path.join(dirpath, base))
+    return hits[0] if len(hits) == 1 else None
+
+
+def _defs(py_path):
+    """{qualified name: node} for every function in a file, or None if unparsable."""
+    try:
+        tree = ast.parse(open(py_path, encoding="utf-8").read())
+    except (OSError, SyntaxError):
+        return None
+    out = {}
+
+    def walk(node, prefix):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = prefix + child.name
+                out.setdefault(name, []).append(child)
+                if name != child.name:
+                    # A bare-name alias, so a spec may cite `method` without its
+                    # class. Guarded: at module level the two names are equal and
+                    # an unguarded alias registers every top-level function twice,
+                    # which reads as "matches 2 functions" on a correct citation.
+                    out.setdefault(child.name, []).append(child)
+                walk(child, name + ".")
+            elif isinstance(child, ast.ClassDef):
+                walk(child, prefix + child.name + ".")
+            else:
+                walk(child, prefix)
+
+    walk(tree, "")
+    return out
+
+
+def _direct_returns(node):
+    """Line numbers of the `return`s belonging to THIS function.
+
+    A `return` inside a nested `def` is that function's exit, not this one's, so
+    counting it would make a correct declaration fail.
+    """
+    lines, stack = [], list(ast.iter_child_nodes(node))
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        if isinstance(n, ast.Return):
+            lines.append(n.lineno)
+        stack.extend(ast.iter_child_nodes(n))
+    return sorted(lines)
+
+
+def _enclosing_def(defs, line):
+    """The innermost function containing `line`, or None."""
+    best = None
+    for nodes in defs.values():
+        for n in nodes:
+            end = getattr(n, "end_lineno", None)
+            if end and n.lineno <= line <= end:
+                if best is None or n.lineno > best.lineno:
+                    best = n
+    return best
+
+
+def borrow_defects(ticket_md_path, root=None):
+    """Return the defects in a spec's `borrows:` declarations (AO-013 gap 1).
+
+    Two arms. The first grades every declaration that IS written: the span and
+    the exit lines against `ast`. The second catches the author who writes none —
+    a Design citing a line inside a function with no `borrows:` bullet anywhere
+    is one defect, discharged by `borrows: none — <reason>`.
+
+    Fails open wherever the world, rather than the spec, is the problem: no repo,
+    no Design section, an unresolvable or unparsable file. The remedy for each of
+    those is not something a planning session can act on, and a refusal it cannot
+    clear is a refusal that gets worked around.
+    """
+    root = root or _repo_root()
+    if not root:
+        return []
+    try:
+        text = open(ticket_md_path, encoding="utf-8").read()
+    except OSError:
+        return []
+    design = graded_section(text, "Design")
+    if design is None:
+        return []
+
+    defects, declared = [], 0
+    for block in _blocks(design):
+        m = re.match(r"\s*-\s*\**borrows\**\s*:\s*(.+)", " ".join(block.split()),
+                     re.IGNORECASE | re.DOTALL)
+        if not m:
+            continue
+        declared += 1
+        body = m.group(1)
+        if _BORROW_NONE.match(body):
+            continue
+        spec = _BORROW_SPEC.search(body)
+        if not spec:
+            defects.append(
+                "borrows: declaration is unreadable — write "
+                "`<file>.py:<start>-<end>` `<symbol>` — exits <lines> — <meaning>: %s"
+                % body[:90])
+            continue
+        path, sym = spec.group("path"), spec.group("sym")
+        start, end = int(spec.group("start")), int(spec.group("end"))
+        py = _resolve_py(path, root)
+        if py is None:
+            continue                      # unresolvable/ambiguous: fail open
+        defs = _defs(py)
+        if defs is None:
+            continue
+        nodes = defs.get(sym) or []
+        if len(nodes) != 1:
+            defects.append(
+                "borrows: %s names `%s`, which %s in %s — qualify it as "
+                "`Class.method`" % (path, sym,
+                                    "matches %d functions" % len(nodes) if nodes
+                                    else "no function matches", path))
+            continue
+        node = nodes[0]
+        if (start, end) != (node.lineno, node.end_lineno):
+            # Say which of the two it is. A span that starts right and ends early
+            # is a partial read, which is the failure this exists for; a span
+            # that matches neither end is a stale citation, which a diff landing
+            # above the function produces on its own. Reporting both as "stops
+            # short" would misdescribe the second every time.
+            short = start == node.lineno and end < node.end_lineno
+            defects.append(
+                "borrows: `%s` in %s is %d-%d, not %d-%d — %s"
+                % (sym, path, node.lineno, node.end_lineno, start, end,
+                   "the declaration stops %d line%s short of the end, so the "
+                   "function was not read to it"
+                   % (node.end_lineno - end,
+                      "" if node.end_lineno - end == 1 else "s")
+                   if short else
+                   "the declared span is not this function's"))
+        raw = spec.group("exits").lower()
+        got = set() if raw.startswith("none") else {
+            int(x) for x in re.findall(r"\d+", raw)}
+        want = set(_direct_returns(node))
+        if got != want:
+            defects.append(
+                "borrows: `%s` in %s returns at %s — declared %s. Every exit is "
+                "read, or the value's meaning is only half known"
+                % (sym, path,
+                   ", ".join(str(x) for x in sorted(want)) or "no line (none)",
+                   ", ".join(str(x) for x in sorted(got)) or "none"))
+
+    if declared:
+        return defects
+
+    inside = []
+    for m in _PY_CITATION.finditer(design):
+        py = _resolve_py(m.group(1), root)
+        if py is None:
+            continue
+        defs = _defs(py)
+        if defs is None:
+            continue
+        node = _enclosing_def(defs, int(m.group(2)))
+        if node is not None and m.group(0) not in inside:
+            inside.append(m.group(0))
+    if inside:
+        defects.append(
+            "the Design cites code inside a function %d time%s (%s) and declares "
+            "no `borrows:` line. Declare what the design depends on, or write "
+            "`borrows: none — <reason>`"
+            % (len(inside), "" if len(inside) == 1 else "s",
+               ", ".join(inside[:4])))
+    return defects
+
+
 def is_all_checkable(ticket_md_path):
     """True iff the DoD is non-empty AND every entry is machine-checkable.
 
@@ -1201,6 +1443,36 @@ def _last_block(text, header_re):
     return text[last.end():] if last else None
 
 
+def graded_section(text, name):
+    """The body of `### <name>` — or None when the ticket has no such section.
+
+    AO-013 1g. The matcher used to be `^### <name>$` exactly, and the plan
+    template writes `### Sub-steps  (DERIVED from Design + Impact — not
+    invented)`. So the sub-steps were in GRADED_SECTIONS and never in the graded
+    text: 86 occurrences across 12 distinct heading strings in the local corpus,
+    every one skipped. A round that changed only the work-set moved no hash, and
+    `caused_edit` could not see it.
+
+    The suffix is matched as a PARENTHETICAL, not as a prefix. A prefix match
+    would swallow `Design notes`, `Design-doc section`, `Design review` and
+    `Design — the SIMPLIFICATION`, and `_last_block` takes the LAST match — so
+    the hash would silently grade a UI-review note as the Design.
+
+    The section ends at the next `###` OR the next `##`, matching
+    `_body_sections`. That second half is load-bearing rather than tidiness:
+    without it a ticket whose last graded section is followed by `## Build log`
+    grades its build log too, so every appended build-log line would move the
+    hash and reopen every declared dependency.
+    """
+    rx = re.compile(r"^###\s+" + re.escape(name) + r"\s*(?:\(.*\))?\s*$",
+                    re.MULTILINE)
+    tail = _last_block(text, rx)
+    if tail is None:
+        return None
+    nxt = re.search(r"^##", tail, re.MULTILINE)
+    return tail[:nxt.start()] if nxt else tail
+
+
 def _canonical_graded_text(ticket_md_path):
     """The exact text `caused_edit` is sensitive to, whitespace-normalised.
 
@@ -1213,12 +1485,9 @@ def _canonical_graded_text(ticket_md_path):
         return ""
     chunks = []
     for name in GRADED_SECTIONS:
-        rx = re.compile(r"^###\s+" + re.escape(name) + r"\s*$", re.MULTILINE)
-        tail = _last_block(text, rx)
-        if tail is None:
+        body = graded_section(text, name)
+        if body is None:
             continue
-        nxt = re.search(r"^###\s+", tail, re.MULTILINE)
-        body = tail[:nxt.start()] if nxt else tail
         chunks.append(name + "\n" + " ".join(body.split()))
     for ev in parse_done_evidence(ticket_md_path):
         chunks.append(" ".join(str(sorted(ev.items())).split()))
