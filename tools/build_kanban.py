@@ -1538,6 +1538,12 @@ h1 { font-size: 18px; margin: 0 0 4px; }
    nowrap, no declared font-size beyond the one it needs (it sits in the h1, not
    .hdr-right, so it must state its own — see the ADT-153 note above for why a
    declared size wins over an inherited one). */
+/* The UA stylesheet's [hidden]{display:none} is an AUTHOR-beatable default: the
+   `display` below wins, so `hidden` alone left an empty capsule on the page
+   whenever JS did not run — a broken HTML_JS, or JS off. Restore it explicitly.
+   test_hidden_pill_is_not_displayed asserts the computed style, not the
+   attribute, because the attribute was never the thing that was wrong. */
+.sync-pill[hidden] { display: none; }
 .sync-pill {
   display: inline-flex; align-items: center; gap: 5px;
   margin-left: 8px; padding: 3px 9px;
@@ -1548,6 +1554,8 @@ h1 { font-size: 18px; margin: 0 0 4px; }
   vertical-align: baseline;
 }
 .sync-pill:hover { background: var(--code-bg); border-color: var(--muted); }
+.sync-pill.sync-readonly { cursor: default; }
+.sync-pill.sync-readonly:hover { background: var(--card); border-color: var(--line); }
 .sync-pill:focus-visible {
   /* --text, not --p1: --p1 is the P1-priority colour used by the priority
      badges, and reusing it here conflates "priority one" with "has focus". It
@@ -2161,8 +2169,17 @@ def _sync_pill() -> str:
     if HEALTHY_UNTIL is None or not PROJECT_NAME:
         return ""
     stop, start = watcher_commands(watcher_slug(PROJECT_NAME))
+    # No supervisor on this platform: still SHOW the state, just don't offer a
+    # command there is no way to compose. Returning "" here also cost the reader
+    # the indicator, which is the ticket's first success criterion and not the
+    # part that needs a supervisor. A <span> rather than a <button>, so nothing
+    # advertises an action it cannot perform.
     if not stop or not start:
-        return ""
+        return (
+            '<span id="board-sync" class="sync-pill sync-readonly" hidden '
+            f'data-healthy-until="{int(HEALTHY_UNTIL)}">'
+            '<span class="sync-dot"></span><span class="sync-label"></span>'
+            "</span>")
     return (
         '<button type="button" id="board-sync" class="sync-pill" hidden '
         f'data-healthy-until="{int(HEALTHY_UNTIL)}" '

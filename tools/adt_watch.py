@@ -417,6 +417,11 @@ def _health_stamp(cfg: dict) -> float | None:
     None means "no window published" and the renderer omits the pill entirely.
     Never coerce it to 0.0, which the page would read as long expired.
     """
+    if not (cfg.get("cache_dir") or cfg.get("project")):
+        # adt_sync.cache_dir() ends in os.makedirs(..., exist_ok=True), so
+        # reading the state doc through an unidentified cfg CREATED
+        # ~/.adt/project/cache as a side effect of a read. Found in QA.
+        return None
     v = adt_sync._load_state_doc(cfg).get("healthy_until")
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return None

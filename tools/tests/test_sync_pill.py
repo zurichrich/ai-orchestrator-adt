@@ -186,7 +186,10 @@ def test_window_stamped_before_sync(tmp_path, monkeypatch):
     assert seen["mid"] is not None, "no window published before _sync ran"
     assert seen["mid"] >= before - 5, "the pre-sync stamp is not fresh"
     assert after is not None
-    assert after >= seen["mid"], "no second stamp after the pass completed"
+    assert after > seen["mid"], (
+        "the window was not re-stamped after the pass completed. `>=` would "
+        "hold trivially here when the two are equal, which is exactly how a "
+        "deleted post-sync stamp passed QA")
 
 
 def test_breached_tick_not_stamped(tmp_path, monkeypatch):
@@ -289,10 +292,22 @@ def test_missing_window_hides_pill(tmp_path, monkeypatch):
     page = _page(tmp_path, healthy_until=None)
     assert 'id="board-sync"' not in page
     assert "data-healthy-until" not in page
-    # And the same when the platform has no supervisor to drive.
+
+
+def test_unsupported_platform_still_shows_state(tmp_path, monkeypatch):
+    """No supervisor means no COMMANDS, not no indicator.
+
+    Returning nothing here also cost the reader the state, which is the
+    ticket's first success criterion and the half that needs no supervisor.
+    Rendered as a <span>, so nothing advertises an action it cannot perform.
+    """
     monkeypatch.setattr(build_kanban.sys, "platform", "win32")
     page = _page(tmp_path, healthy_until=1_700_000_000)
-    assert 'id="board-sync"' not in page
+    assert 'id="board-sync"' in page
+    assert re.search(r'data-healthy-until="\d{10}"', page)
+    assert "sync-readonly" in page
+    assert "<button" not in page.split('id="board-sync"')[1][:200]
+    assert "data-stop" not in page and "data-start" not in page
 
 
 # ── 1e: the pill's CSS, in both themes and at the breakpoint ────────────────
@@ -624,3 +639,45 @@ def test_copy_reports_only_what_happened(tmp_path):
 
     assert "Ctrl+C" in out["linux"]["label"], out["linux"]["label"]
     assert "⌘" not in out["linux"]["label"]
+
+
+# ── QA findings 1 and 3 ─────────────────────────────────────────────────────
+
+def test_hidden_pill_is_not_displayed():
+    """`hidden` alone did NOT hide the pill.
+
+    The UA stylesheet's `[hidden] { display: none }` is author-beatable, and
+    `.sync-pill { display: inline-flex }` beat it — so a page whose JS never ran
+    showed an empty grey capsule. Found in QA.
+
+    Asserted here by specificity, which is decidable from the stylesheet alone:
+    `.sync-pill[hidden]` is (0,2,0) and `.sync-pill` is (0,1,0), so the former
+    wins regardless of source order. The computed-style proof is the Rule-10
+    walkthrough's, recorded in the build log — a string check cannot make it.
+    """
+    css = build_kanban.HTML_CSS
+    assert ".sync-pill[hidden]" in css, "nothing restores display:none when hidden"
+    rule = css.split(".sync-pill[hidden]")[1].split("}")[0]
+    assert "display: none" in rule, f"[hidden] rule does not set display: {rule!r}"
+    # And no LATER, equally-or-more specific selector re-sets display on it.
+    after = css.split(".sync-pill[hidden]")[1]
+    for bad in (".sync-pill[hidden]", ".sync-pill.sync-on[hidden]"):
+        assert f"{bad} {{" not in after.replace(rule, "", 1), f"{bad} redefined later"
+
+
+def test_late_figure_is_rendered_and_correct(tmp_path):
+    """The "Nm late" arithmetic, with a NON-ZERO figure.
+
+    The earlier suite only drove a window 10s past, where the figure rounds to
+    0 and the label takes the bare 'sync off' branch — so changing the /60
+    divisor to /600 passed everything. Found in QA.
+    """
+    out = _run_pill(tmp_path, """
+      const now = Math.floor(Date.now() / 1000);
+      result.twelve = page(now - 745);     // 12.4 min -> 12
+      result.one    = page(now - 90);      // 1.5 min  -> 2 (rounds up)
+      result.zero   = page(now - 10);      // rounds to 0 -> bare label
+    """)
+    assert out["twelve"]["label"] == "sync off · 12m late", out["twelve"]["label"]
+    assert out["one"]["label"] == "sync off · 2m late", out["one"]["label"]
+    assert out["zero"]["label"] == "sync off", out["zero"]["label"]
