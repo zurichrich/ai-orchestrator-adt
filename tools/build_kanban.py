@@ -28,7 +28,6 @@ import shutil
 import html
 import re
 import subprocess
-import sys
 from collections import defaultdict
 
 # ADT-115: the pricer. One direction only — adt_cost never imports this module,
@@ -76,7 +75,6 @@ MACHINES: list = []
 # rendered at all. NEVER default the window to 0: the page would read that as
 # long expired and paint a board red that has simply never been stamped.
 HEALTHY_UNTIL: float | None = None
-PROJECT_NAME = ""
 # Matches the watcher's launchd StartInterval (60s). The board is regenerated
 # every tick, so refreshing faster buys a re-read of an unchanged file and
 # refreshing slower leaves the tab behind the cache it mirrors.
@@ -222,7 +220,7 @@ def configure(project_root, *, backlog_root=".adt/backlog",
               id_prefix="TIX", stage_tools=None, commands_doc_src=None,
               issues_url="", board_url="", rate_pools=None,
               token_ledger_root="", repo_name="", branch_protection=None,
-              machines=None, project_name="", healthy_until=None):
+              machines=None, healthy_until=None):
     """Rebind module config for a project. Call before render/run.
 
     issues_url / board_url (the cache-first migration): the GitHub backlog repo's issues base
@@ -246,11 +244,10 @@ def configure(project_root, *, backlog_root=".adt/backlog",
     machines (ADT-384): the machine reports from .adt/state/machines.json, for
     the page footer. None/empty → no footer.
 
-    project_name / healthy_until (AO-006): the project the watcher agent is
-    installed under, and the epoch until which the pass that rendered this page
-    vouches for it. The page compares the second against the viewer's clock to
-    colour the header's sync pill. Either missing → no pill, because a board
-    that cannot say whether it is live must not imply that it is.
+    healthy_until (AO-006): the epoch until which the pass that rendered this
+    page vouches for it. The page compares it against the viewer's clock to
+    colour the header's sync button. None → no button, because a board that
+    cannot say whether it is live must not imply that it is.
 
     token_ledger_root: the CODE checkout that owns the gitignored token ledger,
     when REPO is NOT a code tree (the cache dir under adt_watch). The ledger is
@@ -258,7 +255,7 @@ def configure(project_root, *, backlog_root=".adt/backlog",
     adt-token-log hook writes. Empty → resolve from REPO (single-checkout case)."""
     global REPO, BL, REPO_URL, ID_PREFIX, STAGE_TOOLS, ID_RE, COMMANDS_DOC_SRC
     global ISSUES_URL, BOARD_URL, RATE_POOLS, TOKEN_LEDGER_ROOT, REPO_NAME
-    global BRANCH_PROTECTION, MACHINES, PROJECT_NAME, HEALTHY_UNTIL
+    global BRANCH_PROTECTION, MACHINES, HEALTHY_UNTIL
     REPO = Path(project_root).resolve()
     TOKEN_LEDGER_ROOT = token_ledger_root
     BL = REPO / backlog_root
@@ -268,7 +265,6 @@ def configure(project_root, *, backlog_root=".adt/backlog",
     RATE_POOLS = list(rate_pools or [])
     BRANCH_PROTECTION = branch_protection
     MACHINES = list(machines or [])
-    PROJECT_NAME = project_name
     HEALTHY_UNTIL = healthy_until
     REPO_NAME = repo_name
     ID_PREFIX = id_prefix
@@ -1554,8 +1550,9 @@ h1 { font-size: 18px; margin: 0 0 4px; }
   vertical-align: baseline;
 }
 .sync-pill:hover { background: var(--code-bg); border-color: var(--muted); }
-.sync-pill.sync-readonly { cursor: default; }
-.sync-pill.sync-readonly:hover { background: var(--card); border-color: var(--line); }
+/* Disabled = the board was opened as a file:// URL, so there is no watcher to
+   POST to. It still SHOWS the state; it just cannot change it. */
+.sync-pill[disabled] { cursor: default; opacity: 0.75; }
 .sync-pill:focus-visible {
   /* --text, not --p1: --p1 is the P1-priority colour used by the priority
      badges, and reusing it here conflates "priority one" with "has focus". It
@@ -1878,100 +1875,64 @@ applyFilters();
 // on an already-navigating document and is a no-op.
 setTimeout(function () { location.reload(); }, __REFRESH_MS__);
 
-// AO-006 — the header sync pill. The page carries the watcher's published
+// AO-006 — the header sync button. The page carries the watcher's published
 // validity window and nothing about state; the colour is decided HERE, on every
-// load, because the watcher is the only thing that renders this page. Anything
-// it wrote about its own health would freeze at its last value the moment it
-// died, and the refresh above would reload the same bytes forever.
+// load, because the watcher is the only thing that renders this page.
 //
-// No fetch: this is a file:// page where fetch is CORS-blocked, which is why
-// the reload above is a timer and not a poller. Reading a rendered attribute
-// needs no network.
-const SYNC_GRACE_LABEL_MS = 2000;
-
-// The shortcut the manual-copy fallback names. Hardcoding the Mac one told
-// every Linux and Windows reader the wrong key, in the branch that fires
-// precisely when nothing else worked.
-function syncCopyShortcut() {
-  const p = (navigator.platform || navigator.userAgent || '');
-  return /Mac|iPhone|iPad|iPod/.test(p) ? 'press \u2318C' : 'press Ctrl+C';
-}
+// The click POSTs to the watcher itself, which serves this board. That is why
+// the watcher is resident: a 60s --once tick has no process alive to take it.
+// Opened as a file:// URL the board still renders; the button disables itself,
+// because there is nothing to POST to.
+const SYNC_LABEL_MS = 1500;
 
 function syncPill() {
   const el = document.getElementById('board-sync');
-  if (!el) return;                       // no window published, or no supervisor
+  if (!el) return;
   const until = parseInt(el.dataset.healthyUntil || '0', 10);
-  if (!until) return;                    // never render a state from a missing value
+  if (!until) return;
   const live = Date.now() / 1000 <= until;
   const lateMin = Math.max(0, Math.round((Date.now() / 1000 - until) / 60));
+  const served = location.protocol === 'http:' || location.protocol === 'https:';
 
   el.classList.toggle('sync-on', live);
   el.classList.toggle('sync-off', !live);
   el.querySelector('.sync-label').textContent =
     live ? 'sync on' : (lateMin ? 'sync off \u00b7 ' + lateMin + 'm late' : 'sync off');
-  el.setAttribute('aria-label', live
-    ? 'Sync is running. Click to copy the command that stops it.'
-    : 'Sync has stopped. Click to copy the command that starts it.');
-  el.title = (live ? el.dataset.stop : el.dataset.start) + '  -- click to copy';
+  el.disabled = !served;
+  el.setAttribute('aria-label', served
+    ? (live ? 'Sync is running. Click to stop it.'
+            : 'Sync is stopped. Click to start it.')
+    : 'Sync status. Open the board from the watcher to start or stop it.');
+  el.title = served
+    ? (live ? 'click to stop' : 'click to start')
+    : 'open the board from the watcher to start or stop sync';
   el.hidden = false;
 }
 
-// Copy the command for the state the pill is CURRENTLY showing. The label says
-// "copied" only after a copy actually happened: on both paths failing it selects
-// the text instead, so the button never claims something it did not do.
-function syncPillCopy(el) {
-  const live = el.classList.contains('sync-on');
-  const cmd = live ? el.dataset.stop : el.dataset.start;
+// Ask the watcher to flip, then show what it reports — never what we assumed.
+// The pill reads its state from the next render either way, so a failed POST
+// leaves the truth on screen rather than a guess.
+function syncPillToggle(el) {
   const label = el.querySelector('.sync-label');
   const restore = label.textContent;
-  const announce = el.getAttribute('aria-label');
-  const done = function (ok) {
-    label.textContent = ok ? 'copied' : syncCopyShortcut();
-    // The button carries an aria-label, so its text content is not read out.
-    // Update the label itself, or the copy result is visual-only.
-    el.setAttribute('aria-label', ok
-      ? 'Command copied to the clipboard.'
-      : 'Could not copy automatically. The command is selected; ' +
-        syncCopyShortcut() + ' to copy it.');
-    setTimeout(function () {
-      label.textContent = restore;
-      el.setAttribute('aria-label', announce);
-    }, SYNC_GRACE_LABEL_MS);
-  };
-  const fallback = function () {
-    const ta = document.createElement('textarea');
-    ta.value = cmd;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
-    if (ok) {
-      document.body.removeChild(ta);
-      done(true);
-      return;
-    }
-    // Copy failed, so the label is about to name a keyboard shortcut. That
-    // instruction is only true while something is still SELECTED — removing the
-    // textarea here strands it on a selection that no longer exists. Leave it
-    // in place, still selected, until the label restores.
-    done(false);
-    setTimeout(function () {
-      if (ta.parentNode) ta.parentNode.removeChild(ta);
-    }, SYNC_GRACE_LABEL_MS);
-  };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(cmd).then(function () { done(true); }, fallback);
-  } else {
-    fallback();
-  }
+  el.disabled = true;
+  label.textContent = '\u2026';
+  fetch('/sync/toggle', {method: 'POST'})
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (s) {
+      label.textContent = s.paused ? 'stopped' : 'started';
+      setTimeout(function () { location.reload(); }, SYNC_LABEL_MS);
+    })
+    .catch(function () {
+      label.textContent = 'failed';
+      setTimeout(function () { label.textContent = restore; el.disabled = false; },
+                 SYNC_LABEL_MS);
+    });
 }
 
 document.addEventListener('click', function (e) {
   const el = e.target && e.target.closest ? e.target.closest('#board-sync') : null;
-  if (el) syncPillCopy(el);
+  if (el && !el.disabled) syncPillToggle(el);
 });
 
 syncPill();
@@ -2105,86 +2066,22 @@ def _machines_footer() -> str:
             + "".join(rows) + "</footer>")
 
 
-def watcher_slug(name: str) -> str:
-    """A launchd/systemd-safe id from a project name.
-
-    MIRROR of `_watcher_slug` in lib/watcher.sh:31 — the shell is the original,
-    because install is what names the agent. The copy exists here because the
-    board must compose the stop/start command for an agent it did not install,
-    and the alternative (carrying the slug in .adt/config.yaml) needs the
-    installer's source order changed and every existing install re-run:
-    lib/watcher.sh is sourced AFTER lib/github-bootstrap.sh in both
-    adt-install.sh and setup.sh, so write_project_config cannot see it.
-
-    The same mirroring is done deliberately elsewhere (adt_cost.canon_tix). A
-    mirror that drifts composes a command naming an agent that does not exist,
-    so test_sync_pill.py::test_slug_matches_shell runs the SHELL function itself
-    over a table of awkward names rather than restating its rules here.
-    """
-    # tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//'
-    s = re.sub(r"[^a-z0-9]", "-", name.lower())
-    s = re.sub(r"-{2,}", "-", s)
-    return s.strip("-")
-
-
-def watcher_commands(slug: str) -> tuple[str, str]:
-    """(stop, start) for this machine's watcher agent, or ("", "") if neither
-    supervisor applies.
-
-    Chosen by sys.platform at RENDER time, which is the right clock: the board
-    is rendered by the watcher, on the machine the watcher runs on, so the
-    platform that rendered the page is the platform whose agent the reader would
-    stop. lib/watcher.sh installs a launchd user agent on darwin and a
-    `systemd --user` timer elsewhere; anything else gets no commands and the
-    caller renders no button.
-    """
-    if not slug:
-        return "", ""
-    if sys.platform == "darwin":
-        label = f"com.adt.{slug}.watch"
-        return (f"launchctl bootout gui/$(id -u)/{label}",
-                f"launchctl bootstrap gui/$(id -u) "
-                f"~/Library/LaunchAgents/{label}.plist")
-    if sys.platform.startswith("linux"):
-        unit = f"adt-watch-{slug}.timer"
-        return (f"systemctl --user stop {unit}",
-                f"systemctl --user start {unit}")
-    return "", ""
-
-
 def _sync_pill() -> str:
-    """The header's sync indicator, or "" when there is nothing truthful to say.
+    """The header's sync button, or "" when there is no window to report.
 
-    Renders the published window and the two commands and NOTHING about state.
-    The colour is decided in the browser (HTML_JS syncPill()), because the
-    watcher is the only thing that renders this page: any state written here
-    freezes at its last value the moment the watcher dies, the meta refresh
-    reloads the same bytes, and the pill would stay green forever — the one case
-    this exists to show.
+    Carries the published window and NOTHING about state: the colour is decided
+    in the browser, because the watcher is the only thing that renders this page
+    and anything it wrote about its own health would freeze at its last value
+    the moment it stopped.
 
-    `hidden` and no state class, so a page with JS off shows nothing rather than
-    something wrong. Omitted entirely when no window has been published or the
-    platform has no supervisor to drive.
+    `hidden` plus the [hidden] rule in HTML_CSS, so a page whose JS never ran
+    shows nothing rather than an undecided capsule.
     """
-    if HEALTHY_UNTIL is None or not PROJECT_NAME:
+    if HEALTHY_UNTIL is None:
         return ""
-    stop, start = watcher_commands(watcher_slug(PROJECT_NAME))
-    # No supervisor on this platform: still SHOW the state, just don't offer a
-    # command there is no way to compose. Returning "" here also cost the reader
-    # the indicator, which is the ticket's first success criterion and not the
-    # part that needs a supervisor. A <span> rather than a <button>, so nothing
-    # advertises an action it cannot perform.
-    if not stop or not start:
-        return (
-            '<span id="board-sync" class="sync-pill sync-readonly" hidden '
-            f'data-healthy-until="{int(HEALTHY_UNTIL)}">'
-            '<span class="sync-dot"></span><span class="sync-label"></span>'
-            "</span>")
     return (
         '<button type="button" id="board-sync" class="sync-pill" hidden '
-        f'data-healthy-until="{int(HEALTHY_UNTIL)}" '
-        f'data-stop="{html.escape(stop, quote=True)}" '
-        f'data-start="{html.escape(start, quote=True)}">'
+        f'data-healthy-until="{int(HEALTHY_UNTIL)}">'
         '<span class="sync-dot"></span><span class="sync-label"></span>'
         "</button>")
 
@@ -2844,7 +2741,7 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
         id_prefix="TIX", stage_tools=None, commands_doc_src=None,
         issues_url="", board_url="", rate_pools=None,
         token_ledger_root="", repo_name="", branch_protection=None,
-        quiet=False, machines=None, project_name="", healthy_until=None):
+        quiet=False, machines=None, healthy_until=None):
     """Generate the board for a project. The entry point a shim calls.
     If project_root is None, uses whatever configure() last set (or the
     module defaults).
@@ -2861,8 +2758,7 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
                   issues_url=issues_url, board_url=board_url,
                   rate_pools=rate_pools, token_ledger_root=token_ledger_root,
                   repo_name=repo_name, branch_protection=branch_protection,
-                  machines=machines, project_name=project_name,
-                  healthy_until=healthy_until)
+                  machines=machines, healthy_until=healthy_until)
 
     # Load the token ledger BEFORE items — Item.__init__ reads TOKEN_USAGE
     # to set per-ticket .tokens. Empty dict when no ledger exists. the cost-of-work work.

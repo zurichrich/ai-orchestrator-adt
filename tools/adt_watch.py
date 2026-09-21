@@ -289,14 +289,12 @@ def _render(cache: str, cfg: dict, code_root: str = "",
                          # sit under the code checkout's .adt/state, not the cache.
                          machines=(adt_machines.load_machines(code_root)
                                    if code_root else None),
-                         # AO-006: the project the watcher agent is installed
-                         # under, and the window this machine last vouched for.
+                         # AO-006: the window this machine last vouched for.
                          # Read from the persisted state rather than computed
-                         # here, so ONE path covers both branches — a normal
-                         # tick has just stamped it, and a breached tick
-                         # deliberately has not, which is what makes the pill go
-                         # red on a watcher that is not syncing.
-                         project_name=cfg.get("project", ""),
+                         # here, so ONE path covers every branch — a normal tick
+                         # has just stamped it; a breached or PAUSED tick
+                         # deliberately has not, which is what turns the button
+                         # red on a board that is not being synced.
                          healthy_until=_health_stamp(cfg),
                          # ADT-119: under --once (the launchd tick) the three
                          # "Wrote …" lines are the same text 1,440 times a day.
@@ -385,6 +383,95 @@ BACKOFF_MAX_SHIFT = 24
 # whose numbers match observed behaviour; `test_watch_backoff_breaker.py` pins
 # the degenerate case so it cannot silently become unfireable again.
 RATE_FLOOR_SHARE = 0.15
+
+
+# AO-006. The board's stop/start button. Pausing does NOT unload the agent —
+# the loop keeps running and skips its pass — which is what lets ONE process
+# serve both directions. Unloading it would leave nothing alive to start it
+# again, and that dead end is what three earlier designs of this ticket ran
+# into.
+BOARD_PORT = 8787
+
+
+def _pause_flag(cache: str) -> str:
+    """Where the paused marker lives. In the cache, so it is outside every git
+    checkout and visible to the same process that renders the board."""
+    return os.path.join(cache, ".paused")
+
+
+def _is_paused(cache: str) -> bool:
+    return os.path.exists(_pause_flag(cache))
+
+
+def _set_paused(cfg: dict, cache: str, paused: bool) -> bool:
+    """Flip the flag, and clear the backoff on the way through.
+
+    The ladder reset is the half that is easy to miss: after QUIET_GRACE
+    all-noop ticks `next_due` is up to BACKOFF_CAP away, so a resume would sit
+    idle for up to five minutes and look broken. Only a resident watcher can do
+    this, because the process that owns the tick state is the one taking the
+    click.
+    """
+    flag = _pause_flag(cache)
+    if paused:
+        with open(flag, "w"):
+            pass
+    elif os.path.exists(flag):
+        os.unlink(flag)
+    _save_watch_state(cfg, 0, 0.0, _watch_state(cfg).get("fp") or 0.0)
+    return _is_paused(cache)
+
+
+def _serve_board(cfg: dict, cache: str, port: int):
+    """Serve the rendered board and accept the toggle, in this same process.
+
+    GET  /            -> kanban.html      (and every other file beside it)
+    POST /sync/toggle -> flip, then report the new state as JSON
+
+    Bound to 127.0.0.1 only. The board opened as a file:// URL still renders;
+    its button simply does nothing, because the page checks its own protocol.
+    """
+    import http.server
+    import json as _json
+    import socketserver
+    import threading
+
+    class _H(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=cache, **kw)
+
+        def _json(self, payload, code=200):
+            body = _json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            if self.path.rstrip("/") != "/sync/toggle":
+                self._json({"error": "not found"}, 404)
+                return
+            now_paused = _set_paused(cfg, cache, not _is_paused(cache))
+            print(f"  [adt-watch] sync {'paused' if now_paused else 'resumed'} "
+                  f"from the board.", file=sys.stderr)
+            self._json({"paused": now_paused})
+
+        def do_GET(self):
+            if self.path in ("", "/"):
+                self.path = "/kanban.html"
+            super().do_GET()
+
+        def log_message(self, *a):
+            pass                      # ADT-119: an idle tick writes zero bytes
+
+    class _S(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    srv = _S(("127.0.0.1", port), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
 
 
 def _health_window(now: float) -> float:
@@ -523,6 +610,18 @@ def watch(project_root: str, interval: float = 5.0, once: bool = False) -> None:
               f"render={'on' if _HAVE_RENDERER else 'off'}")
 
     last_fp = None
+    # AO-006: the control surface, resident mode only. Under --once there is no
+    # process to keep it, which is exactly why the watcher is now resident.
+    board_srv = None
+    if not once:
+        try:
+            board_srv = _serve_board(cfg, cache, int(cfg.get("board_port") or BOARD_PORT))
+            print(f"[adt-watch] board http://127.0.0.1:"
+                  f"{board_srv.server_address[1]}/", file=sys.stderr)
+        except OSError as e:                 # port taken: the board still renders
+            print(f"[adt-watch] board server not started ({e}); the pill will "
+                  f"show state but not toggle.", file=sys.stderr)
+
     while True:
         _rotate_log(project_root)            # bound the launchd log (ADT-119)
 
@@ -607,8 +706,14 @@ def watch(project_root: str, interval: float = 5.0, once: bool = False) -> None:
                         # breach check above would then be bypassed, and a
                         # rate-limited tick — which is genuinely not syncing —
                         # would keep refreshing its own green light forever.
-                        _stamp_health(cfg, now)
-                        moved = _sync(project_root)  # push local changes + pull remote
+                        # AO-006: paused means the loop keeps running and does
+                        # not sync. The window is NOT stamped, so the pill goes
+                        # red — which is truthful: the board is not being synced.
+                        if _is_paused(cache):
+                            moved = False
+                        else:
+                            _stamp_health(cfg, now)
+                            moved = _sync(project_root)  # push local + pull remote
                         last_fp = _cache_fingerprint(cache)  # re-read: our own write-backs
                         # (issue_number, pulled changes) bump mtimes; capture post-sync so
                         # we don't loop on our own writes.
@@ -619,7 +724,14 @@ def watch(project_root: str, interval: float = 5.0, once: bool = False) -> None:
                         # tick opened with: a slow pass has consumed part of the
                         # window it was given, and the board it is about to
                         # render is fresh as of this moment.
-                        _stamp_health(cfg, time.time())
+                        #
+                        # Guarded, like the pre-sync stamp: a PAUSED tick must
+                        # not vouch for a board it did not sync. Without this
+                        # the pill stays green while sync is off — the exact
+                        # false-green the ticket exists to prevent, arriving
+                        # through the pause the ticket added.
+                        if not _is_paused(cache):
+                            _stamp_health(cfg, time.time())
                     # ADT-384: once a UTC day, this machine's ADT version and
                     # commit go on the adt:install Issue, where other machines'
                     # installers and boards read them. Before the render, so

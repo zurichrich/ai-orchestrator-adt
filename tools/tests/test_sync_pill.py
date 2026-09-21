@@ -21,81 +21,11 @@ TOOLS = Path(__file__).resolve().parent.parent
 REPO = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 import build_kanban  # noqa: E402
-
-
-# ── 1a: the slug mirror must not drift from lib/watcher.sh ──────────────────
-
-# Awkward on purpose: case, dots, spaces, runs of separators, leading/trailing
-# punctuation, and a name that is nothing but separators.
-_SLUG_NAMES = [
-    "ai-orchestrator-adt",
-    "My.Project",
-    "Foo  Bar",
-    "--weird--",
-    "A_B.C",
-    "UPPER",
-    "trailing-",
-    "-leading",
-    "dots...everywhere",
-    "mixed_-_separators",
-    "a",
-    "___",
-]
-
-
-def _shell_slug(name: str) -> str:
-    """Run the REAL _watcher_slug from lib/watcher.sh, not a restatement of it."""
-    script = REPO / "lib" / "watcher.sh"
-    assert script.is_file(), f"lib/watcher.sh not found at {script}"
-    # `set -euo pipefail` at the top of watcher.sh is fine under `bash -c`.
-    out = subprocess.run(
-        ["bash", "-c", f'source "{script}"; _watcher_slug "$1"', "_", name],
-        capture_output=True, text=True, timeout=30,
-    )
-    assert out.returncode == 0, f"shell slug failed: {out.stderr}"
-    return out.stdout.rstrip("\n")
-
-
-def test_slug_matches_shell():
-    mismatches = []
-    for name in _SLUG_NAMES:
-        got, want = build_kanban.watcher_slug(name), _shell_slug(name)
-        if got != want:
-            mismatches.append(f"{name!r}: python={got!r} shell={want!r}")
-    assert not mismatches, "watcher_slug drifted from lib/watcher.sh:\n" + "\n".join(mismatches)
-
-
-# ── 1b: both platform branches, including the one this machine never runs ────
-
-def test_commands_both_platforms(monkeypatch):
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
-    stop, start = build_kanban.watcher_commands("my-proj")
-    assert stop == "launchctl bootout gui/$(id -u)/com.adt.my-proj.watch"
-    assert start == (
-        "launchctl bootstrap gui/$(id -u) "
-        "~/Library/LaunchAgents/com.adt.my-proj.watch.plist")
-
-    monkeypatch.setattr(build_kanban.sys, "platform", "linux")
-    stop, start = build_kanban.watcher_commands("my-proj")
-    assert stop == "systemctl --user stop adt-watch-my-proj.timer"
-    assert start == "systemctl --user start adt-watch-my-proj.timer"
-
-    # Neither supervisor: no commands, so 1d renders no button rather than one
-    # whose click copies nothing.
-    monkeypatch.setattr(build_kanban.sys, "platform", "win32")
-    assert build_kanban.watcher_commands("my-proj") == ("", "")
-
-    # No slug is the same case.
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
-    assert build_kanban.watcher_commands("") == ("", "")
-
-
-# ── 1c: the watcher publishes the window ────────────────────────────────────
-
 import adt_sync  # noqa: E402
 import adt_watch  # noqa: E402
 
 
+# ── 1a: the slug mirror must not drift from lib/watcher.sh ──────────────────
 def _project(tmp_path):
     """A project root adt_sync.load_config can read, with an empty cache."""
     cache = tmp_path / "cache"
@@ -120,14 +50,15 @@ def _project(tmp_path):
     return str(tmp_path)
 
 
-def _run_tick(tmp_path, monkeypatch, *, breached=False, moved=False, on_sync=None):
+def _run_tick(tmp_path, monkeypatch, *, breached=False, moved=False, on_sync=None,
+              existing_root=None):
     """One real tick of adt_watch.watch(once=True) with the network stubbed.
 
     Only the calls that reach GitHub or write HTML are replaced. The state
     plumbing under test — _stamp_health, _save_watch_state, _watch_state — runs
     for real against a temp sidecar.
     """
-    root = _project(tmp_path)
+    root = existing_root or _project(tmp_path)
 
     def fake_sync(project_root, pull=True):
         if on_sync is not None:
@@ -236,10 +167,9 @@ def test_watch_fields_untouched_by_stamp(tmp_path, monkeypatch):
 
 # ── 1d: the renderer emits the window and nothing about state ───────────────
 
-def _page(tmp_path, *, healthy_until, project="ai-orchestrator-adt"):
+def _page(tmp_path, *, healthy_until):
     (tmp_path / "enhancements" / "ideas").mkdir(parents=True, exist_ok=True)
-    build_kanban.configure(str(tmp_path), project_name=project,
-                           healthy_until=healthy_until)
+    build_kanban.configure(str(tmp_path), healthy_until=healthy_until)
     return build_kanban.render_html(build_kanban.load_items())
 
 
@@ -250,7 +180,6 @@ def test_render_independent_of_window(tmp_path, monkeypatch):
     render identically even from a server-side computation, so the test would
     pass while the regression it exists to catch was present.
     """
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
     now = 1_700_000_000
     fresh = _page(tmp_path, healthy_until=now + 3600)      # comfortably valid
     stale = _page(tmp_path, healthy_until=now - 3600)      # an hour expired
@@ -274,12 +203,11 @@ def test_render_independent_of_window(tmp_path, monkeypatch):
 
 
 def test_rendered_board_carries_the_window(tmp_path, monkeypatch):
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
     page = _page(tmp_path, healthy_until=1_700_000_000)
     assert re.search(r'data-healthy-until="\d{10}"', page)
     assert 'id="board-sync"' in page and "hidden" in page
-    # The commands are rendered, so the click has something to copy.
-    assert "launchctl bootout" in page and "launchctl bootstrap" in page
+    # No commands: the button acts, it does not hand the reader a string.
+    assert "launchctl" not in page and "data-stop" not in page
 
 
 def test_missing_window_hides_pill(tmp_path, monkeypatch):
@@ -288,34 +216,14 @@ def test_missing_window_hides_pill(tmp_path, monkeypatch):
     Zero would read as long expired and paint a board red that has simply never
     been stamped — a first-ever tick, or a state file predating this field.
     """
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
     page = _page(tmp_path, healthy_until=None)
     assert 'id="board-sync"' not in page
     assert "data-healthy-until" not in page
-
-
-def test_unsupported_platform_still_shows_state(tmp_path, monkeypatch):
-    """No supervisor means no COMMANDS, not no indicator.
-
-    Returning nothing here also cost the reader the state, which is the
-    ticket's first success criterion and the half that needs no supervisor.
-    Rendered as a <span>, so nothing advertises an action it cannot perform.
-    """
-    monkeypatch.setattr(build_kanban.sys, "platform", "win32")
-    page = _page(tmp_path, healthy_until=1_700_000_000)
-    assert 'id="board-sync"' in page
-    assert re.search(r'data-healthy-until="\d{10}"', page)
-    assert "sync-readonly" in page
-    assert "<button" not in page.split('id="board-sync"')[1][:200]
-    assert "data-stop" not in page and "data-start" not in page
-
-
-# ── 1e: the pill's CSS, in both themes and at the breakpoint ────────────────
-
 def test_pill_css_uses_tokens_and_both_themes():
     css = build_kanban.HTML_CSS
     for sel in (".sync-pill {", ".sync-pill.sync-on", ".sync-pill.sync-off",
-                ".sync-pill::after", ".sync-dot", ".sync-pill:focus-visible"):
+                ".sync-pill::after", ".sync-dot", ".sync-pill:focus-visible",
+                ".sync-pill[hidden]", ".sync-pill[disabled]"):
         assert sel in css, f"missing rule: {sel}"
 
     block = css[css.index("/* AO-006 sync pill"):
@@ -350,16 +258,13 @@ let execResult = false;
 let navigatorStub = {};
 const pending = [];
 
-function page(healthyUntil) {
+function page(healthyUntil, proto) {
   const label = { textContent: '' };
   const attrs = {};
   const classes = new Set();
   const el = {
-    dataset: {
-      healthyUntil: healthyUntil === null ? '' : String(healthyUntil),
-      stop: 'STOP-CMD',
-      start: 'START-CMD',
-    },
+    dataset: { healthyUntil: healthyUntil === null ? '' : String(healthyUntil) },
+    disabled: false,
     classList: {
       toggle: (c, on) => { on ? classes.add(c) : classes.delete(c); },
       contains: c => classes.has(c),
@@ -392,7 +297,7 @@ function page(healthyUntil) {
         return ta;
       },
     },
-    location: { hash: '', reload() {} },
+    location: { hash: '', protocol: proto || 'http:', reload() {} },
     localStorage: { getItem: () => null, setItem() {} },
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: navigatorStub,
@@ -411,6 +316,7 @@ function page(healthyUntil) {
   return {
     on: classes.has('sync-on'), off: classes.has('sync-off'),
     label: label.textContent, hidden: el.hidden, attrs: attrs, title: el.title,
+    disabled: el.disabled,
     click: fire,
     state: () => ({ label: label.textContent, aria: attrs['aria-label'],
                     textareas: textareas.map(
@@ -471,13 +377,14 @@ def test_window_decides_colour(tmp_path):
     off_label = out["expired"]["attrs"]["aria-label"]
     assert on_label and off_label and on_label != off_label
     assert "aria-pressed" not in out["converged"]["attrs"]
-    # The tooltip shows the command the click would copy.
-    assert "START-CMD" in out["expired"]["title"]
-    assert "STOP-CMD" in out["converged"]["title"]
+    # The tooltip says what the click DOES, which is what was asked for.
+    assert out["converged"]["title"] == "click to stop"
+    assert out["expired"]["title"] == "click to start"
+    # Served over http, so the button is live.
+    assert out["converged"]["disabled"] is False
 
 
 def test_no_unsubstituted_placeholder(tmp_path, monkeypatch):
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
     page = _page(tmp_path, healthy_until=1_700_000_000)
     leftovers = re.findall(r"__[A-Z_]+__", page)
     assert not leftovers, f"unsubstituted placeholders in the page: {leftovers}"
@@ -518,8 +425,8 @@ def test_watch_render_wires_the_window(tmp_path, monkeypatch):
 
     # run()'s REAL signature, captured before it is replaced below.
     accepted = inspect.signature(build_kanban.run).parameters
-    assert "project_name" in accepted and "healthy_until" in accepted, (
-        "build_kanban.run does not accept the kwargs _render passes; the "
+    assert "healthy_until" in accepted, (
+        "build_kanban.run does not accept the kwarg _render passes; the "
         "watcher's render would raise TypeError every tick")
 
     root = _project(tmp_path)
@@ -530,7 +437,6 @@ def test_watch_render_wires_the_window(tmp_path, monkeypatch):
     monkeypatch.setattr(build_kanban, "run", lambda **kw: seen.update(kw))
     adt_watch._render(adt_sync.cache_dir(cfg), cfg, root, quiet=True)
 
-    assert seen.get("project_name") == "probe", seen
     assert seen.get("healthy_until") == 1_700_000_000.0 + 360.0, seen
 
 
@@ -542,7 +448,6 @@ def test_pill_markup_is_accessible(tmp_path, monkeypatch):
     Asserted on the rendered page rather than left to the UI walkthrough: it
     needs no browser, so waiving it would waive something checkable.
     """
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
     page = _page(tmp_path, healthy_until=1_700_000_000)
     tag = re.search(r'<button[^>]*id="board-sync"[^>]*>', page).group(0)
 
@@ -559,90 +464,9 @@ def test_pill_markup_is_accessible(tmp_path, monkeypatch):
     # human runs elsewhere. The label states the state AND the real action.
     assert "aria-label" in js
     assert "aria-pressed" not in js, (
-        "aria-pressed on a copy-only button promises a toggle it does not do")
+        "the label carries the state; aria-pressed would claim a toggle role "
+        "this button does not have")
     assert "el.hidden = false" in js, "the pill is never revealed"
-
-
-def test_commands_are_attribute_escaped(tmp_path, monkeypatch):
-    """A hostile project name cannot break out of the attribute.
-
-    The commands contain $(id -u) and ~, and the project name comes from
-    config. Nothing here is attacker-controlled today, but an attribute that
-    truncates on a quote swallows the rest of the tag.
-    """
-    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
-    build_kanban.configure(str(tmp_path), project_name='we"ird',
-                           healthy_until=1_700_000_000)
-    pill = build_kanban._sync_pill()
-    assert pill, "fixture produced no pill"
-
-    # The slug drops the quote before it can reach an attribute at all.
-    assert "we-ird" in pill
-    stop_value = pill.split('data-stop="')[1].split('"')[0]
-    assert stop_value.endswith("com.adt.we-ird.watch"), stop_value
-    assert '"' not in stop_value
-
-    # One element, not a truncated tag plus loose text.
-    assert pill.count("<button") == 1 and pill.count("</button>") == 1
-    assert pill.count(">") == pill.count("<")
-
-
-def test_copy_reports_only_what_happened(tmp_path):
-    """The label never claims a copy that did not happen, and the manual
-    instruction is only shown while there is still a selection to act on.
-
-    The failure branch matters more than it looks: the board is a file:// page,
-    where navigator.clipboard is generally unavailable, so the execCommand
-    fallback is the DEFAULT path for most readers rather than an edge case.
-    """
-    out = _run_pill(tmp_path, """
-      const now = Math.floor(Date.now() / 1000);
-
-      // 1. execCommand succeeds -> "copied", textarea cleaned up.
-      execResult = true;
-      navigatorStub = {};
-      const okp = page(now + 300);
-      okp.click();
-      result.ok = okp.state();
-
-      // 2. execCommand fails -> names a shortcut, and the textarea it refers
-      //    to is STILL attached and selected while that instruction is shown.
-      execResult = false;
-      navigatorStub = {};
-      const badp = page(now + 300);
-      badp.click();
-      result.failed = badp.state();
-      badp.flush();                       // the restore timeout fires
-      result.after = badp.state();
-
-      // 3. the shortcut is platform-aware, not hardcoded to the Mac key.
-      execResult = false;
-      navigatorStub = { platform: 'Linux x86_64' };
-      const linux = page(now + 300);
-      linux.click();
-      result.linux = linux.state();
-    """)
-
-    assert out["ok"]["label"] == "copied"
-    assert out["ok"]["aria"] == "Command copied to the clipboard."
-    assert out["ok"]["textareas"][0]["attached"] is False, "textarea left behind"
-
-    # The instruction and the thing it refers to must coexist.
-    assert out["failed"]["label"].startswith("press")
-    assert out["failed"]["textareas"][0]["attached"] is True, (
-        "the shortcut was shown after the selection it names was removed")
-    assert out["failed"]["textareas"][0]["selected"] is True
-    assert "selected" in out["failed"]["aria"]
-    # ...and the textarea is cleaned up once the label restores.
-    assert out["after"]["textareas"][0]["attached"] is False
-    assert out["after"]["label"] == "sync on"
-
-    assert "Ctrl+C" in out["linux"]["label"], out["linux"]["label"]
-    assert "⌘" not in out["linux"]["label"]
-
-
-# ── QA findings 1 and 3 ─────────────────────────────────────────────────────
-
 def test_hidden_pill_is_not_displayed():
     """`hidden` alone did NOT hide the pill.
 
@@ -681,3 +505,74 @@ def test_late_figure_is_rendered_and_correct(tmp_path):
     assert out["twelve"]["label"] == "sync off · 12m late", out["twelve"]["label"]
     assert out["one"]["label"] == "sync off · 2m late", out["one"]["label"]
     assert out["zero"]["label"] == "sync off", out["zero"]["label"]
+
+
+# ── the toggle: the button does the thing ───────────────────────────────────
+
+def test_file_url_disables_the_button(tmp_path):
+    """Opened from disk there is no watcher to POST to, so the button says so.
+
+    It still SHOWS the state — that half needs nothing but the rendered window.
+    """
+    out = _run_pill(tmp_path, """
+      const now = Math.floor(Date.now() / 1000);
+      result.served = page(now + 300, 'http:');
+      result.onDisk = page(now + 300, 'file:');
+    """)
+    assert out["served"]["disabled"] is False
+    assert out["served"]["title"] == "click to stop"
+    assert out["onDisk"]["disabled"] is True
+    assert "watcher" in out["onDisk"]["title"]
+    # ...and the state is still readable in both.
+    assert out["onDisk"]["on"] is True and out["onDisk"]["label"] == "sync on"
+
+
+def test_pause_flag_round_trip(tmp_path, monkeypatch):
+    """_set_paused flips the flag AND clears the backoff.
+
+    The ladder reset is the half that is easy to miss: after QUIET_GRACE
+    all-noop ticks `next_due` is up to BACKOFF_CAP away, so a resume would sit
+    idle for minutes and look broken. Proven by driving a real tick first, so
+    the state under test is one a real watcher produced.
+    """
+    root = _run_tick(tmp_path, monkeypatch, moved=False)
+    cfg = adt_sync.load_config(root)
+    cache = adt_sync.cache_dir(cfg)
+
+    assert adt_watch._is_paused(cache) is False
+    # Put the ladder somewhere a resume would have to climb down from.
+    adt_watch._save_watch_state(cfg, 9, 1e12, "fp")
+    assert adt_watch._watch_state(cfg)["next_due"] == 1e12
+
+    assert adt_watch._set_paused(cfg, cache, True) is True
+    assert adt_watch._is_paused(cache) is True
+    st = adt_watch._watch_state(cfg)
+    assert st["quiet"] == 0 and st["next_due"] == 0.0, (
+        "the backoff was not cleared; a resume would idle for up to "
+        "BACKOFF_CAP seconds and look broken")
+
+    assert adt_watch._set_paused(cfg, cache, False) is False
+    assert adt_watch._is_paused(cache) is False
+
+
+def test_paused_tick_does_not_sync_and_goes_red(tmp_path, monkeypatch):
+    """Paused means the loop keeps running and skips the pass.
+
+    The window is not re-stamped, so the pill goes red — truthful, because the
+    board is genuinely not being synced. This is the whole reason pause beats
+    unloading the agent: the process stays alive to be started again.
+    """
+    root = _run_tick(tmp_path, monkeypatch, moved=False)
+    cfg = adt_sync.load_config(root)
+    cache = adt_sync.cache_dir(cfg)
+    stamped_while_running = adt_watch._health_stamp(cfg)
+    assert stamped_while_running is not None
+
+    adt_watch._set_paused(cfg, cache, True)
+    synced = []
+    _run_tick(tmp_path, monkeypatch, on_sync=lambda r: synced.append(1),
+              existing_root=root)
+    assert synced == [], "a paused tick still called _sync"
+    assert adt_watch._health_stamp(cfg) == stamped_while_running, (
+        "a paused tick re-stamped the window; the pill would stay green on a "
+        "board that is not being synced")
