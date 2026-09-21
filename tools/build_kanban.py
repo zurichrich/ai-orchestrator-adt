@@ -1854,6 +1854,76 @@ applyFilters();
 // on an already-navigating document and is a no-op.
 setTimeout(function () { location.reload(); }, __REFRESH_MS__);
 
+// AO-006 — the header sync pill. The page carries the watcher's published
+// validity window and nothing about state; the colour is decided HERE, on every
+// load, because the watcher is the only thing that renders this page. Anything
+// it wrote about its own health would freeze at its last value the moment it
+// died, and the refresh above would reload the same bytes forever.
+//
+// No fetch: this is a file:// page where fetch is CORS-blocked, which is why
+// the reload above is a timer and not a poller. Reading a rendered attribute
+// needs no network.
+const SYNC_GRACE_LABEL_MS = 2000;
+
+function syncPill() {
+  const el = document.getElementById('board-sync');
+  if (!el) return;                       // no window published, or no supervisor
+  const until = parseInt(el.dataset.healthyUntil || '0', 10);
+  if (!until) return;                    // never render a state from a missing value
+  const live = Date.now() / 1000 <= until;
+  const lateMin = Math.max(0, Math.round((Date.now() / 1000 - until) / 60));
+
+  el.classList.toggle('sync-on', live);
+  el.classList.toggle('sync-off', !live);
+  el.querySelector('.sync-label').textContent =
+    live ? 'sync on' : (lateMin ? 'sync off \u00b7 ' + lateMin + 'm late' : 'sync off');
+  el.setAttribute('aria-pressed', live ? 'true' : 'false');
+  el.setAttribute('aria-label', live
+    ? 'Sync is running. Click to copy the command that stops it.'
+    : 'Sync has stopped. Click to copy the command that starts it.');
+  el.title = (live ? el.dataset.stop : el.dataset.start) + '  -- click to copy';
+  el.hidden = false;
+}
+
+// Copy the command for the state the pill is CURRENTLY showing. The label says
+// "copied" only after a copy actually happened: on both paths failing it selects
+// the text instead, so the button never claims something it did not do.
+function syncPillCopy(el) {
+  const live = el.classList.contains('sync-on');
+  const cmd = live ? el.dataset.stop : el.dataset.start;
+  const label = el.querySelector('.sync-label');
+  const restore = label.textContent;
+  const done = function (ok) {
+    label.textContent = ok ? 'copied' : 'press \u2318C';
+    setTimeout(function () { label.textContent = restore; }, SYNC_GRACE_LABEL_MS);
+  };
+  const fallback = function () {
+    const ta = document.createElement('textarea');
+    ta.value = cmd;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+    document.body.removeChild(ta);
+    done(ok);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd).then(function () { done(true); }, fallback);
+  } else {
+    fallback();
+  }
+}
+
+document.addEventListener('click', function (e) {
+  const el = e.target && e.target.closest ? e.target.closest('#board-sync') : null;
+  if (el) syncPillCopy(el);
+});
+
+syncPill();
+
 // Keep the reader's place in an open ticket across that reload. The panel is a
 // fixed overlay with its own scrollbar, and a browser restores only the page's
 // scroll position on reload, never an element's, so without this every 60s tick

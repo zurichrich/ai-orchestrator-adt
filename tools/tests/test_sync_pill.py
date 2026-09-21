@@ -317,3 +317,144 @@ def test_pill_css_uses_tokens_and_both_themes():
     assert "min-width: 44px" in css and "min-height: 44px" in css
     narrow = css[css.index("@media (max-width: 480px)"):]
     assert ".sync-pill { white-space: normal; }" in narrow
+
+
+# ── 1f: the comparison, actually executed ───────────────────────────────────
+
+import json  # noqa: E402
+import shutil  # noqa: E402
+
+import pytest  # noqa: E402
+
+_PILL_HARNESS = r"""
+const vm = require('vm');
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[2], 'utf8');
+
+function page(healthyUntil) {
+  const label = { textContent: '' };
+  const attrs = {};
+  const classes = new Set();
+  const el = {
+    dataset: {
+      healthyUntil: healthyUntil === null ? '' : String(healthyUntil),
+      stop: 'STOP-CMD',
+      start: 'START-CMD',
+    },
+    classList: {
+      toggle: (c, on) => { on ? classes.add(c) : classes.delete(c); },
+      contains: c => classes.has(c),
+    },
+    querySelector: sel => (sel === '.sync-label' ? label : null),
+    setAttribute: (k, v) => { attrs[k] = v; },
+    title: '',
+    hidden: true,
+  };
+  const ctx = {
+    document: {
+      addEventListener() {},
+      querySelectorAll: () => [],
+      querySelector: () => null,
+      getElementById: id => (id === 'board-sync' ? el : null),
+      body: { classList: { toggle() {} }, appendChild() {}, removeChild() {} },
+      createElement: () => ({ style: {}, setAttribute() {}, select() {} }),
+    },
+    location: { hash: '', reload() {} },
+    localStorage: { getItem: () => null, setItem() {} },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    navigator: {},
+    setTimeout() {},
+    JSON: JSON,
+    Date: Date,
+    Math: Math,
+    parseInt: parseInt,
+  };
+  ctx.window = ctx;
+  ctx.addEventListener = () => {};
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+  return { on: classes.has('sync-on'), off: classes.has('sync-off'),
+           label: label.textContent, hidden: el.hidden, attrs: attrs,
+           title: el.title };
+}
+
+const result = {};
+__SCENARIO__
+process.stdout.write(JSON.stringify(result));
+"""
+
+
+def _run_pill(tmp_path, scenario: str) -> dict:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    js = tmp_path / "page.js"
+    js.write_text(build_kanban.HTML_JS.replace(
+        "__REFRESH_MS__", str(build_kanban.REFRESH_SECONDS * 1000)))
+    harness = tmp_path / "pill-harness.js"
+    harness.write_text(_PILL_HARNESS.replace("__SCENARIO__", scenario))
+    r = subprocess.run([node, str(harness), str(js)],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, f"harness failed:\n{r.stdout}\n{r.stderr}"
+    return json.loads(r.stdout)
+
+
+def test_window_decides_colour(tmp_path):
+    """The three cases every fixed-threshold draft of this got wrong.
+
+    300s out is a converged board on BACKOFF_CAP — healthy, and three earlier
+    designs reddened it. 10s out is an ordinary tick. 10s past is the only one
+    that may be red.
+    """
+    out = _run_pill(tmp_path, """
+      const now = Math.floor(Date.now() / 1000);
+      result.converged = page(now + 300);
+      result.ordinary  = page(now + 10);
+      result.expired   = page(now - 10);
+      result.absent    = page(null);
+    """)
+    assert out["converged"]["on"] and not out["converged"]["off"]
+    assert out["converged"]["label"] == "sync on"
+    assert out["ordinary"]["on"] and not out["ordinary"]["off"]
+    assert out["expired"]["off"] and not out["expired"]["on"]
+    assert out["expired"]["label"].startswith("sync off")
+    # Unhidden only once a state has actually been decided.
+    assert out["converged"]["hidden"] is False and out["expired"]["hidden"] is False
+    # A missing window decides nothing and stays hidden.
+    assert out["absent"]["hidden"] is True
+    assert not out["absent"]["on"] and not out["absent"]["off"]
+    # State is in words as well as colour.
+    assert out["converged"]["attrs"]["aria-pressed"] == "true"
+    assert out["expired"]["attrs"]["aria-pressed"] == "false"
+    assert out["expired"]["attrs"]["aria-label"]
+    # The tooltip shows the command the click would copy.
+    assert "START-CMD" in out["expired"]["title"]
+    assert "STOP-CMD" in out["converged"]["title"]
+
+
+def test_no_unsubstituted_placeholder(tmp_path, monkeypatch):
+    monkeypatch.setattr(build_kanban.sys, "platform", "darwin")
+    page = _page(tmp_path, healthy_until=1_700_000_000)
+    leftovers = re.findall(r"__[A-Z_]+__", page)
+    assert not leftovers, f"unsubstituted placeholders in the page: {leftovers}"
+
+
+def test_html_js_parses(tmp_path):
+    """HTML_JS is valid JavaScript after substitution.
+
+    Found while building 1f: HTML_JS is a NON-raw triple-quoted Python string,
+    so a backslash-n written into it is consumed by Python and reaches the page
+    as a real line break inside a JS string literal. The whole script then fails
+    to parse — filters, panel-scroll and pill all dead — and nothing on the
+    board looks broken enough to notice. A syntax check is the only thing that
+    catches it.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    js = tmp_path / "page.js"
+    js.write_text(build_kanban.HTML_JS.replace(
+        "__REFRESH_MS__", str(build_kanban.REFRESH_SECONDS * 1000)))
+    r = subprocess.run([node, "--check", str(js)],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, f"HTML_JS does not parse:\n{r.stderr}"
