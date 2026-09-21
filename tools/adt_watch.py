@@ -289,6 +289,15 @@ def _render(cache: str, cfg: dict, code_root: str = "",
                          # sit under the code checkout's .adt/state, not the cache.
                          machines=(adt_machines.load_machines(code_root)
                                    if code_root else None),
+                         # AO-006: the project the watcher agent is installed
+                         # under, and the window this machine last vouched for.
+                         # Read from the persisted state rather than computed
+                         # here, so ONE path covers both branches — a normal
+                         # tick has just stamped it, and a breached tick
+                         # deliberately has not, which is what makes the pill go
+                         # red on a watcher that is not syncing.
+                         project_name=cfg.get("project", ""),
+                         healthy_until=_health_stamp(cfg),
                          # ADT-119: under --once (the launchd tick) the three
                          # "Wrote …" lines are the same text 1,440 times a day.
                          # The conditional lines build_kanban prints on a real

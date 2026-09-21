@@ -458,3 +458,33 @@ def test_html_js_parses(tmp_path):
     r = subprocess.run([node, "--check", str(js)],
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, f"HTML_JS does not parse:\n{r.stderr}"
+
+
+# ── 1g: the wiring, through the live path ───────────────────────────────────
+
+def test_watch_render_wires_the_window(tmp_path, monkeypatch):
+    """adt_watch._render reaches build_kanban.run with BOTH new kwargs.
+
+    Through the real _render, not a grep and not build_kanban.run directly: a
+    grep on the call site cannot see that run() rejects the argument, and a
+    direct call cannot see that _render never passes it. ADT-224's zeros were
+    exactly this shape — the wiring was wrong while both ends were right.
+    """
+    import inspect
+
+    # run()'s REAL signature, captured before it is replaced below.
+    accepted = inspect.signature(build_kanban.run).parameters
+    assert "project_name" in accepted and "healthy_until" in accepted, (
+        "build_kanban.run does not accept the kwargs _render passes; the "
+        "watcher's render would raise TypeError every tick")
+
+    root = _project(tmp_path)
+    cfg = adt_sync.load_config(root)
+    adt_watch._stamp_health(cfg, 1_700_000_000.0)
+
+    seen = {}
+    monkeypatch.setattr(build_kanban, "run", lambda **kw: seen.update(kw))
+    adt_watch._render(adt_sync.cache_dir(cfg), cfg, root, quiet=True)
+
+    assert seen.get("project_name") == "probe", seen
+    assert seen.get("healthy_until") == 1_700_000_000.0 + 360.0, seen

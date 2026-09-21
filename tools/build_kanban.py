@@ -2783,7 +2783,7 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
         id_prefix="TIX", stage_tools=None, commands_doc_src=None,
         issues_url="", board_url="", rate_pools=None,
         token_ledger_root="", repo_name="", branch_protection=None,
-        quiet=False, machines=None):
+        quiet=False, machines=None, project_name="", healthy_until=None):
     """Generate the board for a project. The entry point a shim calls.
     If project_root is None, uses whatever configure() last set (or the
     module defaults).
@@ -2800,7 +2800,8 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
                   issues_url=issues_url, board_url=board_url,
                   rate_pools=rate_pools, token_ledger_root=token_ledger_root,
                   repo_name=repo_name, branch_protection=branch_protection,
-                  machines=machines)
+                  machines=machines, project_name=project_name,
+                  healthy_until=healthy_until)
 
     # Load the token ledger BEFORE items — Item.__init__ reads TOKEN_USAGE
     # to set per-ticket .tokens. Empty dict when no ledger exists. the cost-of-work work.
