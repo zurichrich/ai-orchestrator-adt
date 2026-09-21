@@ -183,14 +183,20 @@ def _save_state(cfg, quiet):
 '''
 
 
-def _repo(tmp_path, design, module=_MODULE, lane="planned"):
-    """A git repo holding the module, plus a ticket in `lane/` citing it."""
-    import subprocess
+def _repo(tmp_path, design, git=False):
+    """A tree holding the module, plus a ticket in `planned/` citing it.
+
+    `git=True` only for the test that drives the CLI, which resolves the repo
+    root itself; every other test passes `root=` directly, and `git init` is 20ms
+    a piece.
+    """
     repo = tmp_path / "repo"
     (repo / "tools").mkdir(parents=True)
-    (repo / "tools" / "watch_fixture.py").write_text(module)
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    cache = tmp_path / "cache" / lane
+    (repo / "tools" / "watch_fixture.py").write_text(_MODULE)
+    if git:
+        import subprocess
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    cache = tmp_path / "cache" / "planned"
     cache.mkdir(parents=True)
     md = cache / "ticket.md"
     md.write_text("---\nid: B-1\ntrack: standard\ndone_evidence:\n"
@@ -199,26 +205,32 @@ def _repo(tmp_path, design, module=_MODULE, lane="planned"):
     return str(md), str(repo)
 
 
+def _msgs(out, code="BORROW"):
+    return [m for c, m in out if c == code]
+
+
 def test_a_borrow_stopping_short_of_the_function_end_is_a_defect(tmp_path):
     """The AO-006 round-3 shape: the span ends before the sentinel return."""
     md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-4` "
-                               "`_backoff_due` — exits 4 — a deadline.")
+                               "`_backoff_due` — exits 4 — 0.0 is a sentinel "
+                               "meaning run eagerly, not a timestamp.")
     out = adt_dod.borrow_defects(md, root=repo)
-    assert any("is 1-6, not 1-4" in d and "2 lines short" in d for d in out), out
-    assert any("returns at 4, 6" in d and "declared 4" in d for d in out), out
+    got = _msgs(out)
+    assert any("is 1-6, not 1-4" in d and "2 lines short" in d for d in got), out
+    assert any("returns at 4, 6" in d and "declared 4" in d for d in got), out
 
 
 def test_a_borrow_read_to_the_end_is_clean(tmp_path):
     md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-6` "
                                "`_backoff_due` — exits 4, 6 — 0.0 at 4 is a "
-                               "sentinel, not a time.")
+                               "sentinel meaning run eagerly, not a time.")
     assert adt_dod.borrow_defects(md, root=repo) == []
 
 
 def test_a_function_with_no_returns_declares_none(tmp_path):
     md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:9-10` "
-                               "`_save_state` — exits none — it writes, and "
-                               "returns nothing.")
+                               "`_save_state` — exits none — it writes the "
+                               "whole dict and returns nothing at all.")
     assert adt_dod.borrow_defects(md, root=repo) == []
 
 
@@ -226,7 +238,7 @@ def test_a_design_citing_code_inside_a_function_with_no_borrow_is_a_defect(tmp_p
     md, repo = _repo(tmp_path, "- the deadline comes from "
                                "`tools/watch_fixture.py:5`, which is a time.")
     out = adt_dod.borrow_defects(md, root=repo)
-    assert len(out) == 1 and "declares no `borrows:` line" in out[0], out
+    assert len(out) == 1 and "declares no `borrows:` line" in out[0][1], out
 
 
 def test_a_citation_outside_any_function_needs_no_borrow(tmp_path):
@@ -245,17 +257,31 @@ def test_borrows_none_discharges_the_no_declaration_defect(tmp_path):
 
 def test_a_borrow_naming_no_such_function_is_a_defect(tmp_path):
     md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-6` "
-                               "`_no_such_helper` — exits 4, 6 — a deadline.")
+                               "`_no_such_helper` — exits 4, 6 — the deadline "
+                               "this design compares the clock against.")
     out = adt_dod.borrow_defects(md, root=repo)
-    assert len(out) == 1 and "no function matches" in out[0], out
+    assert len(out) == 1 and "no function matches" in out[0][1], out
 
 
-def test_an_unresolvable_citation_fails_open(tmp_path):
-    """A file the repo does not hold is not something a planning session can
-    fix by editing the spec, so it reports nothing rather than blocking."""
+def test_an_unresolvable_citation_is_reported_and_never_refused(tmp_path):
+    """A file the tree does not hold is not something a planning session can fix
+    by editing the spec. It is reported as SKIPPED so the silence is visible, and
+    `--gate` refuses only on BORROW."""
     md, repo = _repo(tmp_path, "- borrows: `tools/absent.py:1-6` `_gone` — "
-                               "exits 4 — a deadline.")
-    assert adt_dod.borrow_defects(md, root=repo) == []
+                               "exits 4 — the deadline this design compares "
+                               "the clock against.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    assert _msgs(out) == [], out
+    assert len(_msgs(out, "SKIPPED")) == 1, out
+
+
+def test_a_declaration_with_no_meaning_is_a_defect(tmp_path):
+    """The span and the exits are both computable from `ast`. A declaration
+    carrying only those is one an agent can satisfy without reading anything."""
+    md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-6` "
+                               "`_backoff_due` — exits 4, 6 — a time.")
+    out = adt_dod.borrow_defects(md, root=repo)
+    assert len(out) == 1 and "what it means" in out[0][1], out
 
 
 def test_a_borrow_defect_refuses_in_planned_and_only_notes_in_building(tmp_path):
@@ -268,8 +294,8 @@ def test_a_borrow_defect_refuses_in_planned_and_only_notes_in_building(tmp_path)
     import shutil
     import subprocess
     md, repo = _repo(tmp_path, "- borrows: `tools/watch_fixture.py:1-4` "
-                               "`_backoff_due` — exits 4 — a deadline.",
-                     lane="planned")
+                               "`_backoff_due` — exits 4 — the deadline this "
+                               "design compares the clock against.", git=True)
     dod = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(adt_dod.__file__))), "tools", "adt_dod.py")
     args = [sys.executable, dod, "--gate"] + _NO_PLAN_GATE

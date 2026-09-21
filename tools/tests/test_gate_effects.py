@@ -379,15 +379,20 @@ class DeclaredDependencyTest(unittest.TestCase):
             # The fixture carries both markers, and the earliest one in the text
             # is what gets named — asserted exactly, so a regex that started
             # matching something else would not slip through.
-            self.assertEqual(adt_dod.undeclared_justification(t, "coverage"),
-                             "needs no test")
+            self.assertIn("needs no test",
+                          adt_dod.undeclared_justification(t, "coverage"))
             # The other arm, on its own, so both markers are proven rather than
             # one shadowing the other.
             only = ticket(tmp, blocks="### DoD-coverage review\n"
                                       "**Verdict:** COVERED\n"
                                       "A property of existing, unmodified code.\n")
-            self.assertEqual(adt_dod.undeclared_justification(only, "coverage"),
-                             "existing, unmodified code")
+            self.assertIn("existing, unmodified code",
+                          adt_dod.undeclared_justification(only, "coverage"))
+            # The STRUCTURAL half: the reviewer's format requires the line on
+            # every block, so a block with no phrase and no line is still a NOTE.
+            plain = ticket(tmp, blocks=COVERAGE.format(v="COVERED"))
+            self.assertIn("no `**Depends-on-unmodified:**` line",
+                          adt_dod.undeclared_justification(plain, "coverage"))
             r = subprocess.run(
                 [sys.executable, os.path.join(ROOT, "tools", "adt_dod.py"),
                  t, "--record-verdict", "coverage"],

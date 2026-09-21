@@ -337,11 +337,14 @@ done_evidence:
      3. **Every success criterion is named by at least one sub-step.**
      4. **`python3 tools/adt_dod.py <ticket.md> --check-authoring` exits 0.** It
         runs the refusals `--gate` would run later — a prose condition, a
-        dependency defect, an unattached caveat — plus the two that are about
-        this spec's reading of existing code: a `borrows:` declaration that does
-        not match the source, and a recorded verdict whose declared dependency
-        the spec has since moved past. Run it from the tree you are planning
-        against, because a citation resolves against that tree's git toplevel.
+        dependency defect, an unattached caveat — plus three that are about this
+        spec's own reading: a `borrows:` declaration that does not match the
+        source, a recorded verdict whose declared dependency the spec has since
+        moved past, and a `SECTION` line when a graded section's heading matches
+        nothing, so the graded-text hash cannot see it. A `SKIPPED` line is not a
+        defect: it names a citation the checker could not resolve, printed so the
+        silence is visible. Run it from the tree you are planning against,
+        because a citation resolves against that tree's git toplevel.
 
      A failure here is an authoring defect, and the reviewer should never see
      it. Fix it, then dispatch the reviewer.
@@ -354,7 +357,10 @@ done_evidence:
    **A round count is not the only signal, and it is the weaker one.**
    Two consecutive negative plan-quality verdicts means the design is diverging; stop and ask the human.
    `--record-verdict plan-quality` prints `ESCALATE` when it records the second
-   one, so this does not depend on anyone keeping count. A spec that kills a
+   one, so this does not depend on anyone keeping count. What is *measured* is
+   two rejections in a row; that the design is being replaced rather than
+   refined is the inference, and the human is who tests it. On `full` that
+   arrives one round before the tier's own limit would, which is the point. A spec that kills a
    design every round is in a different state from one narrowing its findings,
    and it reaches the human sooner than the tier's limit would take it there.
    Coverage keeps its own limits: a GAP says the grading is incomplete, not that

@@ -146,6 +146,25 @@ out="$(run "$T")"
 counted "$out" && bad "a bare line reference was read as a counted claim: $out" \
                 || ok "quantity without a completeness word -> not flagged"
 
+# e6. The regression the cleanup pass found: a pass-claim carries a quantity and
+# a completeness word, and a pytest invocation contains no counting command. This
+# is the commonest correct sentence in the repo, and check (c) already governs it.
+T="$TMP/e6.jsonl"; : > "$T"
+user_text "run the tests" "$T"
+asst_bash "python3 -m pytest tools/tests/ -q" "$T"
+asst_text "All 23 tests pass." "$T"
+out="$(run "$T")"
+counted "$out" && bad "a pytest-backed pass-claim was flagged by (e): $out" \
+                || ok "pass-claim left to check (c) -> not flagged by (e)"
+
+# e7. A file:line citation and a ticket id are references, not measurements.
+T="$TMP/e7.jsonl"; : > "$T"
+user_text "where" "$T"
+asst_text "All three sentinels are at tools/adt_watch.py:404, every one in AO-006." "$T"
+out="$(run "$T")"
+counted "$out" && bad "a citation-only sentence was read as a counted claim: $out" \
+                || ok "file:line and ticket id excluded -> not flagged"
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = 0 ]

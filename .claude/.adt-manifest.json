@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.2.0",
-  "source_commit": "0cafdb154f716de4d02643c382db806d8f9b077f",
+  "source_commit": "7ae5b8584f311a7a89d3683e7e27baf24c2598fd",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -58,7 +58,7 @@
     },
     {
       "path": "commands/adt-plan.md",
-      "sha256": "3ffaaa668ef45cdb22160b979810ff57fd4d22ff237720ffe59fda81af7c8484"
+      "sha256": "5f6ec7196510b017edc665133b250b2534925349c2e40b76430fc673bc5d094f"
     },
     {
       "path": "commands/adt-qa-run.md",
@@ -114,7 +114,7 @@
     },
     {
       "path": "hooks/adt-phrase-linter.sh",
-      "sha256": "0a295fe8b279a0570404486a7eb94445b73cecef9c3568966216124abe513c3e"
+      "sha256": "f6556cd04b5261cbfdff8ddf4dc5cc46790830a382ee42ee43ea63a398364b42"
     },
     {
       "path": "hooks/adt-reattribute.sh",
@@ -178,7 +178,7 @@
     },
     {
       "path": "tools/adt_dod.py",
-      "sha256": "e6e3e9954f1caaa56fac6a35e4b68089f0d60a7acd69dedc1ea2c1240099d7a0"
+      "sha256": "a6b7a4c48db729322708429050ce4960654f569dac7cf88f053756fd7fb2bb11"
     },
     {
       "path": "tools/plan-quality-calibration.md",

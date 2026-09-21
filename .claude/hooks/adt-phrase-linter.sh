@@ -195,28 +195,50 @@ if PASS_CLAIM.search(last_text):
 # Both halves are required IN THE SAME SENTENCE. A number on its own is a line
 # reference or a ticket id; a completeness word on its own is ordinary prose.
 # Requiring the pair is what keeps this off the rest of a report.
+#
+# WHAT THIS DOES NOT DO: it checks that the turn counted SOMETHING, not that it
+# counted THIS. Check (c) binds a pass-claim to the command it names because a
+# claim names a runner; a counted claim names a noun ("markers"), so there is
+# nothing to bind to. The honest form would compare the claimed number against
+# what the command printed, and the transcript does carry tool results — that is
+# a bigger change than a fourth check, and it is written down here rather than
+# implied by silence. So this catches the AO-006 shape (nothing counted at all)
+# and not a count whose scope was too narrow.
+#
+# `tools/check_provenance.py` asks the same question of DOCS, line by line, with
+# a tuned CLAIM/COMMAND/SKIP set. It is not imported: it does not ship in
+# `.claude/tools/`, so a consumer's hook could not load it. The two SKIP
+# patterns worth having are copied below, and widening either set should be done
+# in both.
 COUNT_QTY = re.compile(
     r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+"
-    r"(?:[\w./-]+\s+){0,2}[a-z][\w/-]*s\b", re.IGNORECASE)
+    r"(?:[\w./-]+\s+){0,2}\w[\w/-]*s\b", re.IGNORECASE)
 COUNT_ALL = re.compile(r"\b(?:all|every|only|none|exactly|each)\b", re.IGNORECASE)
+# References, not measurements (lifted from check_provenance.SKIP): a file:line
+# citation and a ticket id.
+COUNT_SKIP = re.compile(r":\s*[0-9]+\b|\b[A-Z]{2,4}-[0-9]+\b")
 # What counts as counting. `len(` is here because an inline `python3 -` script is
 # how this project's own counts are usually produced; without it the check fires
 # on correctly verified work, and a check that fires on correct work is one that
 # gets worked around.
 COUNTING = re.compile(
     r"\bwc\b|\bgrep\b[^|;&]*\s-[A-Za-z]*c\b|--count\b"
-    r"|\buniq\b[^|;&]*-c\b|\bnl\b|\blen\(", re.IGNORECASE)
+    r"|\buniq\b[^|;&]*-c\b|\blen\(", re.IGNORECASE)
 
-claims = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n", last_text)
-          if COUNT_QTY.search(s) and COUNT_ALL.search(s)]
-if claims:
-    joined = " ".join(turn_bash_cmds)
-    if not COUNTING.search(joined):
-        msgs.append(
-            "a counted or completeness claim whose command cannot support it: %r. "
-            "No command in this turn counted anything (wc, grep -c, uniq -c, "
-            "--count, nl, len(). Cite the command that produced the number, or "
-            "drop the claim (working-style #13)." % claims[0][:120])
+# A pass-claim is check (c)'s business, and (c) is the stricter test: it requires
+# the named runner to have run. "All 23 tests pass" after a real pytest run
+# carries a quantity and a completeness word, and a pytest invocation contains no
+# `wc` or `len(` — so without this skip the commonest correct sentence in this
+# repo draws a warning from (e) while satisfying (c).
+claim = next((s.strip() for s in re.split(r"(?<=[.!?])\s+|\n", last_text)
+              if COUNT_QTY.search(s) and COUNT_ALL.search(s)
+              and not COUNT_SKIP.search(s) and not PASS_CLAIM.search(s)), None)
+if claim and not COUNTING.search(" ".join(turn_bash_cmds)):
+    msgs.append(
+        "a counted or completeness claim whose command cannot support it: %r. "
+        "No command in this turn counted anything (wc, grep -c, uniq -c, "
+        "--count, len(). Cite the command that produced the number, or drop the "
+        "claim (working-style #13)." % claim[:120])
 
 if msgs:
     print(json.dumps({"systemMessage": "⚠ working-style.md: " + " | ".join(msgs)}))
