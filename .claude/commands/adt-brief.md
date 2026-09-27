@@ -61,8 +61,10 @@ not write a ticket with no number.
    Do not use this step as written. Follow "Filing into another project's
    backlog" below.
 
-3. **Write the cache file** at `~/.adt/<project>/cache/<type>/ideas/<slug>.md`,
+3. **Write the cache file** at
+   `~/.adt/<project>/cache/<bugs|enhancements|tasks>/ideas/<slug>.md`,
    stamped `id: <PREFIX>-<num>`, `issue_number: <num>`, `issue_node_id: <node>`.
+   The folder is the plural of `type:`, so `type: bug` goes in `bugs/`.
    Never make up a local id. Take it from the number GitHub assigned.
 
 ```markdown
@@ -131,7 +133,7 @@ comments: []
 
 6. **Print:**
 ```
-Filed: <slug>.md in ~/.adt/<project>/cache/<type>/ideas/  (sync → GitHub Issue)
+Filed: <slug>.md in ~/.adt/<project>/cache/<bugs|enhancements|tasks>/ideas/  (sync → GitHub Issue)
 Type: <type>, Priority: <P>, Size: <S>, UI: <bool>, Security: <bool>
 ```
 

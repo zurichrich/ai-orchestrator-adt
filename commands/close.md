@@ -77,9 +77,10 @@ checking. An unbound close is one that hook cannot check.
    > is not a reason to skip them. It is the thing to fix. Write the full
    > frontmatter (`slug`, `id`, `title`, `type`, `priority`, `track`,
    > `stage: done`, `state: closed`, `state_reason`, `issue_number`, `commits`,
-   > `tokens`, `cost_usd`, `cost_tier`) straight into `<type>/done/<slug>.md`, in
-   > one atomic step: write a temp file in the same directory, then `mv` it into
-   > place, so the watcher never reads a half-written file. Then stop and let the
+   > `tokens`, `cost_usd`, `cost_tier`) straight into
+   > `<bugs|enhancements|tasks>/done/<slug>.md`, in one atomic step: write a
+   > temp file in the same directory, then `mv` it into place, so the watcher
+   > never reads a half-written file. Then stop and let the
    > `adt watch` tick (about every 60s) update the Issue.
    >
    > **Never change the Issue directly instead.** Setting its state or the

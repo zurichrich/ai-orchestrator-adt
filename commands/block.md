@@ -29,7 +29,8 @@ you would take if no answer came.
    ```
 
 2. **Move the file** to
-   `~/.adt/<project>/cache/<type>/blocked/<slug>.md`, then set `stage: blocked`
+   `~/.adt/<project>/cache/<bugs|enhancements|tasks>/blocked/<slug>.md`,
+   keeping the type folder the file is already in, then set `stage: blocked`
    in it. Use a plain `mv`, never `git mv`. There is **nothing to commit**. The
    cache lives outside every git checkout, so `git` would walk up the directory
    tree and find `$HOME`. `adt watch` carries the new stage to the Issue and the
