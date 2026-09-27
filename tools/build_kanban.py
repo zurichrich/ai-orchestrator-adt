@@ -121,6 +121,14 @@ TYPE_LABEL = {
     "enhancements": "Enhancements",
     "tasks": "Tasks",
 }
+# Every type folder load_items reads, mapped to the type it falls back to.
+# AO-016: the playbooks said `cache/<type>/` while `type:` is singular, so agents
+# wrote tickets into `enhancement/` and the board skipped them silently. Nothing
+# moves a file between type folders, so the singular form is read as storage too.
+TYPE_FOLDERS = {
+    "bugs": "bugs", "enhancements": "enhancements", "tasks": "tasks",
+    "bug": "bugs", "enhancement": "enhancements", "task": "tasks",
+}
 STATUSES = ["ideas", "planned", "building", "qa", "blocked",
             "ready-to-release", "done"]
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "": 3}
@@ -880,9 +888,9 @@ class Item:
 
 def load_items() -> list[Item]:
     items: list[Item] = []
-    for t in TYPES:
+    for folder, t in TYPE_FOLDERS.items():
         for s in STATUSES:
-            d = BL / t / s
+            d = BL / folder / s
             if not d.exists():
                 continue
             for f in sorted(d.glob("*.md")):

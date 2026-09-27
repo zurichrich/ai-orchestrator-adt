@@ -11,7 +11,7 @@ Resolves a ticket that `/adt-block` parked while it waited for the user.
 ## Steps
 
 1. **Pick the ticket.** Use `<slug>` if given. Otherwise list
-   `~/.adt/<project>/cache/<type>/blocked/` and ask which one. Read it.
+   `~/.adt/<project>/cache/*/blocked/` and ask which one. Read it.
 
 2. **Print the `## Blocked` section**: the question, the reason, the
    recommended default, and who blocked it.
@@ -31,8 +31,9 @@ Resolves a ticket that `/adt-block` parked while it waited for the user.
 5. **Move the file back to its previous stage.** The previous stage is the
    ticket's `blocked_from:` frontmatter. If that is missing, use whichever of
    `planned` / `building` / `qa` / `ready-to-release` it was in. Move it to
-   `~/.adt/<project>/cache/<type>/<prior stage>/<slug>.md`. Use a plain `mv`,
-   never `git mv`. There is nothing to commit, and `adt watch` carries the stage.
+   `~/.adt/<project>/cache/<bugs|enhancements|tasks>/<prior stage>/<slug>.md`,
+   keeping the type folder the file is already in. Use a plain `mv`, never
+   `git mv`. There is nothing to commit, and `adt watch` carries the stage.
 
 6. **Then set** `stage: <prior>`, `strike_count: 0`, `last_blocker: null`. Move
    first: the render treats the folder as the truth, so a stage set while the

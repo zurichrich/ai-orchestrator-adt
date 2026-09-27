@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.2.0",
-  "source_commit": "1ee91ede1c2b8242ee0076889c5495217649c794",
+  "source_commit": "0889e80865d3b49ef5eb1d7043d4eb667ce251f0",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -30,11 +30,11 @@
     },
     {
       "path": "commands/adt-block.md",
-      "sha256": "3b5e0931098c52896a4d8fce549e31bb65263d28ca85e7a1ee80efe6b58efa11"
+      "sha256": "2eefe6e580327cda7e9bf85321352da54ee93e0927eb4fc88337dedfa1740880"
     },
     {
       "path": "commands/adt-brief.md",
-      "sha256": "c344275572fc7befc3358fbbbd744be6fb60ae4e5228f160c19b20bb79ea38e3"
+      "sha256": "90b98fc886002d58b40a5083fcc0eb83f80fe7d682e7037238ffce3096f37a21"
     },
     {
       "path": "commands/adt-build-todone.md",
@@ -46,7 +46,7 @@
     },
     {
       "path": "commands/adt-close.md",
-      "sha256": "9747ade4447ea0d13c6487838be9199f6954fd0fe336fc926faaeaecbf6e8bde"
+      "sha256": "1d260003e1496eec151c91cda83b8f1c521e8d0a8b98e61fb0dc43104b55781f"
     },
     {
       "path": "commands/adt-decide.md",
@@ -82,7 +82,7 @@
     },
     {
       "path": "commands/adt-unblock.md",
-      "sha256": "35c87322de8dd79bc50ea34c056b85d96a2876ee73af47f94ecf61945ed5c9b5"
+      "sha256": "4aea9b58834ae68b709c2213df1a82caeaa596996b0992609ea407628923d807"
     },
     {
       "path": "hooks/adt-close-complete.sh",

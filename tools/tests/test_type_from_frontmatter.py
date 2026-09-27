@@ -111,6 +111,26 @@ def test_setting_type_rebuckets_a_type_less_ticket(tmp_path):
     assert (bl / "adopted.md").exists()                # still in tasks/ on disk
 
 
+@pytest.mark.parametrize("folder,expected", [
+    ("bug", "bugs"),
+    ("enhancement", "enhancements"),
+    ("task", "tasks"),
+])
+def test_singular_type_folder_is_rendered(tmp_path, folder, expected):
+    """AO-016: a ticket in a singular type folder shows as one card of the plural type."""
+    bl = tmp_path / ".adt" / "backlog" / folder / "ideas"
+    bl.mkdir(parents=True, exist_ok=True)
+    # No `type:` line, so the card's type can only come from the folder.
+    (bl / "filed.md").write_text(
+        "---\nslug: filed\npriority: P1\nsize: M\nid: ADT-902\n---\n"
+        "\n# Filed\n\nhook.\n"
+    )
+
+    html = _render(tmp_path)
+    assert html.count('id="t-filed"') == 1
+    assert html.count(f'data-type="{expected}"') == 1
+
+
 def test_the_backlog_readme_counts_follow_the_frontmatter(tmp_path):
     """The per-type counts in render_markdown's output use the frontmatter type."""
     bl = tmp_path / ".adt" / "backlog" / "tasks" / "planned"
