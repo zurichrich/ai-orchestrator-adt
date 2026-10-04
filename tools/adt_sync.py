@@ -1587,9 +1587,10 @@ def _relocate_to_stage(path: str, data: dict, recovered: dict, cfg: dict,
 # changed since the watermark?" — billed per REQUEST from the separate core
 # pool, so a converged board costs ~1 near-empty request per tick and zero
 # GraphQL points. A full sweep (no `since`) runs only when the watermark is
-# missing/corrupt or LAST_FULL is older than _FULL_SWEEP_INTERVAL — the sweep
-# is what still reconstructs a locally-deleted cache file whose Issue hasn't
-# updated, which an incremental pull can never see.
+# missing/corrupt, LAST_FULL is older than _FULL_SWEEP_INTERVAL, or the caller
+# forces it (`full=True`, which is what `--pull` on the command line does) —
+# the sweep is what still reconstructs a locally-deleted cache file whose Issue
+# hasn't updated, which an incremental pull can never see.
 # --------------------------------------------------------------------------
 _FULL_SWEEP_INTERVAL = 3600.0  # s between watermark-bypassing full pulls
 _REST_PAGE_SIZE = 100
@@ -1745,7 +1746,8 @@ def _created_within_grace(created_at: str | None,
     return 0 <= age < (RECONSTRUCT_GRACE_SECONDS if window is None else window)
 
 
-def pull_all(cfg: dict, pushed_hashes: dict | None = None) -> list:
+def pull_all(cfg: dict, pushed_hashes: dict | None = None,
+             full: bool = False) -> list:
     """Bring GitHub-owned fields back into the cache; reconstruct missing cache
     files. Returns action summaries. Idempotent.
 
@@ -1760,12 +1762,18 @@ def pull_all(cfg: dict, pushed_hashes: dict | None = None) -> list:
     watermark; full-sweep when the watermark is absent or the last sweep is
     older than _FULL_SWEEP_INTERVAL. `since` is inclusive, so the newest Issue
     re-appears every tick — accepted: the _PULL_OWNED comparison no-ops it,
-    and the alternative (watermark+1s) could miss same-second updates."""
+    and the alternative (watermark+1s) could miss same-second updates.
+
+    `full=True` forces the sweep whatever the pull state says (AO-019). An
+    incremental pull never fetches an Issue whose lane changed before the
+    watermark, so a `--pull` run right after an upgrade left those lanes stale
+    until the next hourly sweep."""
     repo = cfg["repo"]
     pull_state = _load_pull_state(cfg)
     pull_watermark = pull_state.get("watermark")
     last_full = pull_state.get("last_full_pull")
-    full_sweep = (not pull_watermark or not isinstance(last_full, (int, float))
+    full_sweep = (full or not pull_watermark
+                  or not isinstance(last_full, (int, float))
                   or (time.time() - last_full) >= _FULL_SWEEP_INTERVAL)
     issues = _list_issues_rest(repo,
                                since=None if full_sweep else pull_watermark)
@@ -1922,8 +1930,11 @@ def pull_all(cfg: dict, pushed_hashes: dict | None = None) -> list:
 # Reconcile all (push, then optionally pull).
 # --------------------------------------------------------------------------
 def reconcile_all(project_root: str, dry_run: bool = False,
-                  pull: bool = False) -> list:
+                  pull: bool = False, full: bool = False) -> list:
     """One full pass: push the cache to Issues, then optionally pull back.
+
+    `full` is handed to `pull_all` and forces its full sweep. The watch tick
+    leaves it off, so its pull stays incremental.
 
     ADT-112 invariant: every entrypoint that reaches a non-dry create must hold
     `pass_lock` (see the pass-lock note above for what it protects). Today that
@@ -2009,7 +2020,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     # PULL second (Issues -> cache): GitHub-owned fields + missing files.
     if pull and not dry_run:
         try:
-            pulled = pull_all(cfg, pushed_hashes=state)
+            pulled = pull_all(cfg, pushed_hashes=state, full=full)
             results.extend(pulled)
             # AO-007: a relocated ticket is ALREADY converged — its new content
             # is what GitHub says — so record its hash under the new path and
@@ -2071,7 +2082,9 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--pull", action="store_true",
                     help="also pull GitHub-owned fields + reconstruct missing "
-                         "cache files (Issues -> cache).")
+                         "cache files (Issues -> cache). Always a full sweep: "
+                         "every Issue is fetched, not only those changed since "
+                         "the last pull.")
     args = ap.parse_args(argv)
 
     if args.dry_run:
@@ -2102,7 +2115,7 @@ def main(argv=None):
                       "was pushed or adopted — the background watcher picks "
                       "this up on its next tick.")
                 return 0
-            res = reconcile_all(args.root, pull=args.pull)
+            res = reconcile_all(args.root, pull=args.pull, full=args.pull)
 
     for r in res:
         if r["action"] not in ("noop",):

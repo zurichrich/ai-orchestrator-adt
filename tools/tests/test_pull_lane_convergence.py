@@ -346,3 +346,53 @@ def test_converges_with_zero_api_calls_over_three_ticks(tmp_path, monkeypatch):
     for cache in (cache_a, cache_b):
         d = parse_md((cache / "bugs" / "done" / "t.md").read_text())
         assert (d["stage"], d["state"]) == ("done", "closed"), seen
+
+
+# ------------------------------------------------ the CLI pull is a full sweep
+class SinceHonouringGh(FakeGh):
+    """FakeGh that applies `since` inclusively, as the REST endpoint does."""
+
+    def __call__(self, args, input_text=None):
+        self.calls.append(args)
+        if args[0] == "api" and "/issues?" in args[-1]:
+            since = None
+            if "&since=" in args[-1]:
+                since = args[-1].split("&since=")[1].split("&")[0]
+            return json.dumps([i for i in self.issues
+                               if not since or i["updated_at"] >= since])
+        return "{}"
+
+
+def test_cli_pull_sweeps_past_a_fresh_watermark(tmp_path, monkeypatch):
+    """AO-019: `--pull` moves a ticket whose lane changed BEFORE the watermark.
+
+    The Issue was last updated on 09-20 and the watermark sits at 09-25 with a
+    full sweep stamped just now, so an incremental pull never fetches it. That
+    is the state an upgrade is run in: the watcher swept recently, and the
+    installer's adopt pull then found nothing to do while lanes were wrong.
+    """
+    root, cache = _mk_project(tmp_path, "b")
+    path = _cache_with_ticket(cache, lane="blocked", state="open")
+    cfg = adt_sync.load_config(root)
+    _seed_converged(cfg, path)
+    stamped = adt_sync.time.time() - 60
+    adt_sync._save_pull_state(cfg, {"watermark": "2026-09-25T00:00:00Z",
+                                    "last_full_pull": stamped})
+
+    monkeypatch.setattr(adt_sync, "_gh", SinceHonouringGh([_rest_issue()]))
+    for fn in ("checkpoint_tokens", "restamp_closed", "checkpoint_stamp"):
+        monkeypatch.setattr(adt_sync, fn, lambda *a, **k: [])
+
+    # Control: the watch tick's call stays incremental and does not see it.
+    # This also proves the fake filters on `since`, so the assertion below
+    # cannot pass because the fake served everything.
+    adt_sync.reconcile_all(root, pull=True)
+    assert (cache / "bugs" / "blocked" / "t.md").is_file()
+    assert adt_sync._load_pull_state(cfg)["last_full_pull"] == stamped
+
+    assert adt_sync.main(["--root", root, "--pull"]) == 0
+
+    assert (cache / "bugs" / "done" / "t.md").is_file(), \
+        "--pull left a lane stale that changed before the watermark"
+    assert not (cache / "bugs" / "blocked" / "t.md").exists()
+    assert adt_sync._load_pull_state(cfg)["last_full_pull"] > stamped
