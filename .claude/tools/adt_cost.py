@@ -143,6 +143,9 @@ def rates_for(prices: dict, model: str, speed: str) -> dict | None:
     rows carrying `claude-haiku-4-5-20251001` priced to nothing and contributed
     $0 to ADT-224's total, silently — a dict lookup that misses has no way to
     say so, which is the defect `unpriced()` below exists to close.
+
+    AO-020: a model entry's `cache_read_mult` replaces the global cache-read
+    ratio for that model. Cache writes use the global ratios for every model.
     """
     m = (prices.get("models") or {}).get(model)
     if not isinstance(m, dict) and model:
@@ -156,10 +159,11 @@ def rates_for(prices: dict, model: str, speed: str) -> dict | None:
         return None
     mult = prices.get("multipliers") or {}
     inp = float(base.get("input", 0.0))
+    read_mult = m.get("cache_read_mult", mult.get("cache_read", 0.1))
     return {
         "input": inp,
         "output": float(base.get("output", 0.0)),
-        "cache_read": inp * float(mult.get("cache_read", 0.1)),
+        "cache_read": inp * float(read_mult),
         "cache_write_5m": inp * float(mult.get("cache_write_5m", 1.25)),
         "cache_write_1h": inp * float(mult.get("cache_write_1h", 2.0)),
     }

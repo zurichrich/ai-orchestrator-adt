@@ -80,11 +80,16 @@ base input and output — and the multipliers sit alongside:
 
 | Class | Multiplier on base input |
 |---|---|
-| cache read | 0.1x |
+| cache read | 0.1x by default |
 | cache write, 5-minute TTL | 1.25x |
 | cache write, 1-hour TTL | 2x |
 
 Storing five numbers per model would be five chances to get one wrong.
+
+A model entry can carry `cache_read_mult`, which replaces the 0.1x cache-read ratio for that model.
+Three models have one: `claude-opus-5-5` reads cache at 0.05x of input, and
+`claude-fable-5-1` and `claude-mythos-5-1` at 0.025x. Cache writes use the same
+two ratios for every model.
 
 The table carries a `version`, bumped on any rate change, and a stamped cost
 records which version priced it — so a rate correction is auditable rather than a
