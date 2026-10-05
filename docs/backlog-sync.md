@@ -291,10 +291,13 @@ unnecessary**:
   supplies the watermark passed as the `since` parameter to
   `GET /repos/<owner>/<repo>/issues`. REST bills per *request* from the core
   pool — a converged board costs ~1 near-empty request per tick and **zero
-  GraphQL points**. A full sweep (no `since`) runs only when the watermark is
-  missing or the last sweep is over an hour old; the sweep is what still
-  reconstructs a locally-deleted cache file whose Issue hasn't updated —
-  something an incremental pull can never see. The watermark advances only
+  GraphQL points**. On a watch tick, a full sweep (no `since`) runs only when
+  the watermark is missing or the last sweep is over an hour old. A `--pull`
+  run from the command line always does a full sweep (the installer's adopt
+  step is one), so a lane that changed on GitHub before the watermark is
+  carried down in that run. The sweep is also what reconstructs a
+  locally-deleted cache file whose Issue hasn't updated — something an
+  incremental pull can never see. The watermark advances only
   after a successful pass, so a rate-limited tick skips nothing on recovery.
   (PRs share the REST /issues endpoint and are dropped by their
   `pull_request` marker.)
