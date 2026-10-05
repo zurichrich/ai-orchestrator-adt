@@ -37,6 +37,22 @@ def test_cache_rates_are_derived_and_match_the_published_table():
     assert r["cache_write_1h"] == 10.0     # 2x
 
 
+def test_cache_read_ratio_is_per_model():
+    """A model entry's `cache_read_mult` replaces the global 0.1x (AO-020)."""
+    def read(model, speed="standard"):
+        return adt_cost.rates_for(PRICES, model, speed)["cache_read"]
+    assert read("claude-opus-5-5") == pytest.approx(0.20)           # 4 x 0.05
+    assert read("claude-opus-5-5", "fast") == pytest.approx(0.40)   # 8 x 0.05
+    assert read("claude-sonnet-5-5") == pytest.approx(0.20)         # 2 x 0.1
+    assert read("claude-fable-5-1") == pytest.approx(0.25)          # 10 x 0.025
+    assert read("claude-mythos-5-1") == pytest.approx(0.25)
+    assert read("claude-opus-5") == pytest.approx(0.50)             # unchanged
+    # Cache writes keep the global ratios whatever the read ratio is.
+    r = adt_cost.rates_for(PRICES, "claude-opus-5-5", "standard")
+    assert r["cache_write_5m"] == pytest.approx(5.0)
+    assert r["cache_write_1h"] == pytest.approx(8.0)
+
+
 def test_fast_mode_doubles_every_token_class():
     std = adt_cost.rates_for(PRICES, "claude-opus-5", "standard")
     fast = adt_cost.rates_for(PRICES, "claude-opus-5", "fast")
