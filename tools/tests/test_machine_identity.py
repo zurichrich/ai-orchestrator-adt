@@ -150,5 +150,30 @@ class RegisterDedupeTest(unittest.TestCase):
                          15000)
 
 
+class ConsumerProjectIdTest(unittest.TestCase):
+    """#25: in a consumer project the sync wrote this machine's register under
+    the ADT checkout's id while adt-token-total.sh read the project's own id,
+    so the closing stamp counted the machine's spend twice."""
+
+    def test_the_sync_keys_the_register_by_the_projects_id(self):
+        import adt_sync
+        with tempfile.TemporaryDirectory() as tmp:
+            known = str(uuid.uuid4())
+            root = project(tmp, known)
+            self.assertEqual(adt_sync._machine_id(root), known)
+
+    def test_the_board_drops_the_projects_own_register(self):
+        saved = bk.OWN_MACHINE
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                known = str(uuid.uuid4())
+                root = project(tmp, known)
+                os.makedirs(os.path.join(root, ".adt", "backlog"), exist_ok=True)
+                bk.run(root, backlog_root=".adt/backlog", id_prefix="TIX")
+                self.assertEqual(bk.OWN_MACHINE, known)
+        finally:
+            bk.OWN_MACHINE = saved
+
+
 if __name__ == "__main__":
     unittest.main()
