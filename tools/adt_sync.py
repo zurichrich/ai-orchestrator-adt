@@ -1003,9 +1003,13 @@ def _canon_tix(tix: str) -> str:
     return canon_tix(tix)
 
 
-def _machine_id() -> str:
+def _machine_id(project_root: str) -> str:
+    """The PROJECT's install id. With no root, machine_id() reads the ADT
+    checkout's id, and a consumer's register would be keyed by it while
+    adt-token-total.sh reads the project's own id and counts the spend twice
+    (#25)."""
     from build_kanban import machine_id
-    return machine_id()
+    return machine_id(project_root)
 
 
 def _register_body(machine: str, total: int, micros=None,
@@ -1343,7 +1347,7 @@ def checkpoint_tokens(project_root: str, cfg: dict,
     if not is_adt_project(project_root):
         return results
     ck_dir = adt_state_dir(project_root, *_CHECKPOINT_LEAF)
-    machine = _machine_id()
+    machine = _machine_id(project_root)
     repo = cfg["repo"]
     ledger_totals = _ledger_totals(project_root)   # ONE scan per pass
     ledger_costs = _ledger_costs(project_root)     # ONE priced scan per pass

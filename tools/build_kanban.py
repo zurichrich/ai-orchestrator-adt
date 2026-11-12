@@ -2605,7 +2605,15 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
 
     # Load the token ledger BEFORE items — Item.__init__ reads TOKEN_USAGE
     # to set per-ticket .tokens. Empty dict when no ledger exists. the cost-of-work work.
-    global TOKEN_USAGE, COST_USAGE
+    global TOKEN_USAGE, COST_USAGE, OWN_MACHINE
+    # The project's own install id, the one the sync keys this machine's
+    # register by. The import-time value is the ADT checkout's id, which is
+    # wrong for a consumer project and counts its own spend twice (#25).
+    # Read from the root that owns the ledger, and only when it is an ADT
+    # project, so a render outside one never mints an id file.
+    ledger_root = _canonical_root()
+    if (ledger_root / ".adt").is_dir():
+        OWN_MACHINE = machine_id(ledger_root)
     TOKEN_USAGE = load_token_usage()
     COST_USAGE = load_cost_usage()
 
