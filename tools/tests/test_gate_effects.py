@@ -289,13 +289,18 @@ class SerializerTest(unittest.TestCase):
             open(t, "w", encoding="utf-8").write(ticket_serializer.emit_md(data))
             self.assertEqual(adt_dod._read_frontmatter_list(t, "gate_effects"), before)
 
-    def test_gate_effects_is_not_pushed_to_the_issue(self):
+    def test_gate_effects_travels_only_in_the_meta_trailer(self):
+        """AO-027 reversed ADT-224's "never pushed": the rows now ride the hidden
+        meta trailer, so a rebuilt cache keeps them. They must stay out of the
+        body a reader sees, and come back unchanged."""
         with tempfile.TemporaryDirectory() as tmp:
             t = ticket(tmp, blocks=QUALITY.format(v="FLAWED"))
             adt_dod.record_verdict(t, "plan-quality")
             data = ticket_serializer.parse_md(open(t, encoding="utf-8").read())
             issue = ticket_serializer.to_issue(data)
-            self.assertNotIn("gate_effects", issue.get("body", ""))
+            back = ticket_serializer.from_issue(issue, base={})
+            self.assertNotIn("gate_effects", back["body"])
+            self.assertEqual(back["gate_effects"], data["gate_effects"])
 
 
 class BodyCapTest(unittest.TestCase):

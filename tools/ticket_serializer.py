@@ -26,6 +26,7 @@ Field-map contract (frontmatter key -> Issue field):
   closed           -> closedAt
   created_by       -> author.login
   comments         -> comments[]      (list of {author, at, body})
+  every other key  -> body trailer    (`<!-- adt:meta {json} -->`, AO-027)
 Out of scope (documented, not a gap): isPinned, reactionGroups,
 closedByPullRequestsReferences.
 """
@@ -423,6 +424,75 @@ def _with_slug_trailer(body: str, slug) -> str:
     return (base + "\n\n" + trailer + "\n") if base else (trailer + "\n")
 
 
+# ── The metadata carrier (AO-027) ─────────────────────────────────────────
+# Every frontmatter key with no other home on the Issue rides the body as one
+# hidden JSON line, placed before the slug trailer. Without it, `size`,
+# `plan_approved`, `gate_effects`, `commits` and the close stamps lived only in
+# one machine's cache file: a second machine never saw them, and a rebuilt file
+# lost them.
+#
+# The carried set is a COMPLEMENT, not a list, so a field added later (AO-028's
+# Epic and Feature) travels with no change here. Excluded: what to_issue maps
+# elsewhere, the fields the pull owns (adt_sync._PULL_OWNED, repeated here
+# because this module imports nothing from the sync), and `sync_conflict`,
+# which describes one machine's state and must never travel.
+_META_EXCLUDED = frozenset({
+    "title", "body", "slug", "state", "state_reason", "milestone", "created",
+    "created_by", "comments", "done_evidence", "tags",
+    *LABEL_SCALAR_KEYS, *GATE_KEYS,
+    "issue_number", "issue_node_id", "assignees", "updated", "closed",
+    "sync_conflict",
+})
+_META_TRAILER = "<!-- adt:meta %s -->"
+# Same shape rule as _SLUG_TRAILER_RE: only a comment on its OWN line after a
+# blank line (or as the whole body), at the very end, is ours. `\{[^\n]*\}` is
+# safe because the writer escapes every `-->` inside the JSON, so the first
+# `-->` after the opening brace that ends the body is the writer's own.
+_META_TRAILER_RE = re.compile(r"(?:\n\n|\A)<!-- adt:meta (\{[^\n]*\}) -->\n?\Z")
+
+
+def ticket_meta(data: dict) -> dict:
+    """The frontmatter keys the meta trailer carries, with their values."""
+    return {k: v for k, v in data.items() if k not in _META_EXCLUDED}
+
+
+def _strip_meta_trailer(body: str) -> str:
+    """Remove exactly the bytes _with_meta_trailer added. Run it AFTER
+    _strip_slug_trailer: the meta line sits before the slug trailer."""
+    return _META_TRAILER_RE.sub("", body or "")
+
+
+def meta_from_body(body: str):
+    """The metadata an Issue body carries, or None when it carries none.
+
+    None and {} mean different things to the pull: None is an Issue nobody has
+    published metadata to yet (keep the local fields), {} is one whose ticket
+    has no extra fields. `body` must already have its slug trailer stripped."""
+    m = _META_TRAILER_RE.search(body or "")
+    if not m:
+        return None
+    try:
+        meta = json.loads(m.group(1))
+    except ValueError:
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+def _with_meta_trailer(body: str, meta: dict) -> str:
+    """Body with the meta line appended. Idempotent; with no metadata the body
+    is returned untouched, for the same reason _with_slug_trailer does that."""
+    base = _strip_meta_trailer(body or "")
+    if not meta:
+        return body or ""
+    # One line, key-sorted so an unchanged ticket produces unchanged bytes.
+    # `-->` can occur only inside a JSON string, where `\u003e` is the same
+    # character, so escaping it keeps a value from closing the comment.
+    js = json.dumps(meta, sort_keys=True, ensure_ascii=False,
+                    separators=(",", ":"), default=str).replace("-->", "--\\u003e")
+    trailer = _META_TRAILER % js
+    return (base + "\n\n" + trailer) if base else trailer
+
+
 # --------------------------------------------------------------------------
 # The `### Definition of Done` body block (ADT-273).
 #
@@ -603,7 +673,10 @@ def to_issue(data: dict) -> dict:
     issue = {
         "title": title,
         "body": _with_slug_trailer(
-            _render_dod_block(data.get("body", ""), data.get("done_evidence")),
+            _with_meta_trailer(
+                _render_dod_block(data.get("body", ""),
+                                  data.get("done_evidence")),
+                ticket_meta(data)),
             data.get("slug")),
         "number": data.get("issue_number"),
         "id": data.get("issue_node_id"),
@@ -626,13 +699,22 @@ def to_issue(data: dict) -> dict:
 
 def from_issue(issue: dict, base: dict | None = None) -> dict:
     """Map a GitHub Issue JSON dict back to a ticket dict, merging onto `base`
-    (the existing .md fields) so ADT-only keys (id, slug, size…) survive."""
+    (the existing .md fields). The keys with no native Issue field come back
+    from the body's meta trailer (AO-027); an Issue with no trailer leaves
+    `base`'s values in place."""
     out = dict(base or {})
     out["title"] = issue.get("title")
     # Strip the slug carrier back off, and recover `slug` from it when this is a
     # reconstruct (base carries no slug). ADT-174.
     _raw_body = issue.get("body", "")
-    out["body"] = _strip_slug_trailer(_raw_body)
+    _no_slug = _strip_slug_trailer(_raw_body)
+    out["body"] = _strip_meta_trailer(_no_slug)
+    _meta = meta_from_body(_no_slug)
+    if _meta is not None:
+        for k in [k for k in out if k not in _META_EXCLUDED]:
+            if k not in _meta:
+                del out[k]          # removed on the machine that published it
+        out.update({k: v for k, v in _meta.items() if k not in _META_EXCLUDED})
     if not out.get("slug"):
         _carried = _slug_from_trailer(_raw_body)
         if _carried:
