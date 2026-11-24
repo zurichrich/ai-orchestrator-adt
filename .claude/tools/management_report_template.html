@@ -8,10 +8,10 @@
    swimlane timeline: sticky lane labels on the left, a calendar scale that rolls up
    quarter > month > week, and drill-down Epic > Feature > Ticket by double-click. */
 :root{
-  --bg:#EEF1F0; --panel:#FBFCFC; --ink:#14201D; --muted:#5D6B67; --faint:#6B7773;
+  --bg:#EEF1F0; --panel:#FBFCFC; --ink:#14201D; --muted:#5D6B67; --faint:#636F6B;
   --line:#DCE2E0; --line-strong:#B9C3C0; --accent:#0E6B66; --accent-ink:#FFFFFF;
-  --today:#D2492A; --crit:#C23A2B; --weekend:#E6EBE9; --good:#2E7D4F; --row-hover:#F1F5F4;
-  --c0:#3B6AD0; --c1:#B44D8F; --c2:#C97520; --c3:#24907A; --c4:#7152C9; --c5:#B5473A; --c6:#5E8A24;
+  --today:#C0401F; --crit:#C23A2B; --weekend:#E6EBE9; --good:#2E7D4F; --row-hover:#F1F5F4;
+  --c0:#3B6AD0; --c1:#B44D8F; --c2:#A86012; --c3:#1E7A67; --c4:#7152C9; --c5:#B5473A; --c6:#4E741D;
   --f-display:system-ui,-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;
   --f-body:system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -208,7 +208,7 @@ h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp
 .gantt.stack .lab{grid-template-columns:minmax(0,1fr)!important;gap:3px}
 .gantt.stack .lab .cell{font-size:11.5px;color:var(--muted)}
 .gantt.stack .lab .cell::before{content:attr(data-k) " ";font-family:var(--f-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
-.gantt.stack .c-cost{text-align:left}
+.gantt.stack .c-cost,.gantt.stack .c-num{text-align:left}
 .gantt.stack .c-cost small{display:inline;margin-left:6px}
 .gantt.stack .who i{width:16px;height:16px;font-size:8.5px}
 .gantt.stack .row.ticket .tid{display:none}
@@ -319,6 +319,11 @@ try {
 const save = (k,v) => { try { localStorage.setItem(k, v); } catch(e) {} };
 const narrow = matchMedia("(max-width:720px)");
 narrow.addEventListener("change", () => render(true));
+// The stacked layout depends on the window width, so a resize that crosses the
+// threshold re-renders.
+let resizeT;
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => {
+  const g = $("gantt"); if (g.classList.contains("stack") !== stackFor(g)) render(true); }, 150); });
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -392,6 +397,9 @@ function rolled(P, e, f){
   const r = P.rollups[e == null ? "all" : f == null ? "e"+e : "e"+e+"-f"+f];
   return {...r, ps:pd(r.ps), pf:pd(r.pf), as:pd(r.as), af:pd(r.af)};
 }
+// Stack the label cells on phones, or when the chosen columns would take more
+// than 60% of the chart's width.
+const stackFor = g => narrow.matches || S.lwWide > g.clientWidth * 0.6;
 const colorVar = e => `var(--c${e % 7})`;
 const levelOf = () => S.e==null ? "epic" : S.f==null ? "feature" : "ticket";
 const visibleCols = level => ORDER.filter(k => S.cols.includes(k) && (!COLDEF[k].levels || COLDEF[k].levels.includes(level)));
@@ -477,7 +485,8 @@ function render(keepScroll){
   const nameW = level==="ticket" ? 62 + 14 + 240 : 250;
   const lwWide = nameW + vis.reduce((a,k) => a + COLDEF[k].w + 14, 0) + 26;
   const g0 = $("gantt");
-  const stack = narrow.matches || lwWide > g0.clientWidth * 0.6;
+  S.lwWide = lwWide;
+  const stack = stackFor(g0);
   g0.classList.toggle("stack", stack);
   g0.style.setProperty("--lw", (narrow.matches ? 200 : stack ? 280 : lwWide) + "px");
   g0.style.setProperty("--cols", (level==="ticket" ? "62px " : "") + "minmax(0,1fr) " + vis.map(k => COLDEF[k].w+"px").join(" "));
@@ -494,7 +503,7 @@ function render(keepScroll){
   const levelName = S.e==null ? "epics" : "features";
   const chip = S.e!=null ? `<span class="chip" style="--c:${colorVar(S.e)}"></span>` : "";
   const title = S.e==null ? "All epics" : S.f==null ? P.epics[S.e] : P.features[S.e][S.f];
-  $("levelTitle").innerHTML = `${chip}${esc(title)} <small>${L ? L.length+" "+levelName : st.n+(st.n===1?" ticket":" tickets")}</small>`;
+  $("levelTitle").innerHTML = `${chip}${esc(title)} <small>${L ? L.length+" "+(L.length===1 ? levelName.slice(0,-1) : levelName) : st.n+(st.n===1?" ticket":" tickets")}</small>`;
   const nFeat = S.e==null ? P.features.reduce((a,fs,e)=>a+fs.filter((_,f)=>P.T.some(t=>t.e===e&&t.f===f)).length,0) : null;
   const items = [];
   if (S.e==null) items.push([L.length,"Epics"],[nFeat,"Features"]);
