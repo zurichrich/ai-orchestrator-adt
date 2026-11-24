@@ -144,9 +144,9 @@ def check_body_cap(body: str) -> None:
             "Issue body is %d UTF-8 bytes, over GitHub's %d-byte cap (its 422 "
             "reports this as '65536 characters' — the 4-bytes-per-char worst "
             "case). The push would fail and the watcher would retry it "
-            "forever. Move bulk content into frontmatter (which is never "
-            "pushed — `gate_effects` and `done_evidence` both live there for "
-            "this reason) or trim the body."
+            "forever. Trim the body: since AO-027 the frontmatter travels in "
+            "the body's meta trailer too, so moving content into frontmatter "
+            "no longer takes it off the Issue."
             % (n, ISSUE_BODY_CAP_BYTES))
 
 
@@ -2227,7 +2227,8 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     per_number = collections.Counter(int(d["issue_number"]) for _, d in files
                                      if d.get("issue_number"))
 
-    # PUSH first (cache -> Issues): cache is authoritative for content/stage.
+    # PUSH first (cache -> Issues). A push over an Issue that changed since this
+    # machine last saw it is refused as a conflict (AO-027, _conflict_check).
     for path, data in files:
         n = data.get("issue_number")
         if n and per_number[int(n)] > 1:

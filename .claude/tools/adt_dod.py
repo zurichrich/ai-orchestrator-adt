@@ -2008,9 +2008,9 @@ def derive_gate_effects(ticket_md_path, calibration_path=None):
                 break
         # A verdict block with zero records is UNDER-RECORDED, which is a
         # different fact from "the gate never caused an edit". Reporting it as
-        # the latter would quietly credit a gate that was never measured — and
-        # a rebuilt cache produces exactly this state, because frontmatter is
-        # never pushed to the Issue.
+        # the latter would quietly credit a gate that was never measured. A
+        # cache file rebuilt from an Issue pushed before AO-027 produces this
+        # state: those Issues carry no meta trailer, so the rows are missing.
         block_present = _gate_verdict(ticket_md_path, gate) is not None
         derived.append({
             "kind": "derived", "gate": gate,
@@ -2076,5 +2076,3 @@ def dod_amendments(ticket_md_path):
 if __name__ == "__main__":
     import sys
     sys.exit(_cli(sys.argv[1:]))
-
-# adt-bundle: v0.2.0
