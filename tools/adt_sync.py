@@ -1004,10 +1004,7 @@ def _canon_tix(tix: str) -> str:
 
 
 def _machine_id(project_root: str) -> str:
-    """The PROJECT's install id. With no root, machine_id() reads the ADT
-    checkout's id, and a consumer's register would be keyed by it while
-    adt-token-total.sh reads the project's own id and counts the spend twice
-    (#25)."""
+    """The project's install id, the key of this machine's register (#25)."""
     from build_kanban import machine_id
     return machine_id(project_root)
 

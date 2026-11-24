@@ -4,10 +4,14 @@
 """Tests for adt_register_migrate: it re-keys only this machine's register
 comments from hostname to install id, keeps every total, and leaves other
 machines' registers alone."""
+import io
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
+import uuid
+from contextlib import redirect_stdout
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -155,10 +159,6 @@ class RootTest(unittest.TestCase):
     machine's registers by an id the consumer never reads as its own."""
 
     def test_the_new_key_is_the_project_roots_id(self):
-        import io
-        import tempfile
-        import uuid
-        from contextlib import redirect_stdout
         known = str(uuid.uuid4())
         saved = (m.issues_with_registers, m.own_hostname)
         try:
@@ -174,7 +174,7 @@ class RootTest(unittest.TestCase):
                     rc = m.main(["--repo", "o/r", "--root", root])
             self.assertEqual(rc, 0)
             self.assertIn("would re-key 0 comment(s) to %s" % known, out.getvalue())
-            self.assertNotIn(bk.machine_id(), out.getvalue())
+            self.assertNotIn(bk.machine_id(bk.REPO), out.getvalue())
         finally:
             m.issues_with_registers, m.own_hostname = saved
 

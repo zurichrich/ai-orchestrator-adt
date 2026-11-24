@@ -1057,7 +1057,7 @@ def canonical_root(start=None) -> Path:
     return base
 
 
-def machine_id(start=None) -> str:
+def machine_id(start) -> str:
     """The install's ANONYMOUS id — the register PARTITION KEY (ADT-100/ADT-254).
 
     A random UUID READ from `.adt/state/install-id`, minted
@@ -1095,7 +1095,10 @@ def machine_id(start=None) -> str:
     return new_id
 
 
-OWN_MACHINE = machine_id()
+# This machine's install id for the project being rendered. Set by run(),
+# never at import: the import-time default was the ADT checkout's id, which a
+# consumer project does not read as its own (#25).
+OWN_MACHINE = None
 
 
 def _register_totals(text: str) -> dict[str, int]:
@@ -2606,16 +2609,14 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
     # Load the token ledger BEFORE items — Item.__init__ reads TOKEN_USAGE
     # to set per-ticket .tokens. Empty dict when no ledger exists. the cost-of-work work.
     global TOKEN_USAGE, COST_USAGE, OWN_MACHINE
-    # The project's own install id, the one the sync keys this machine's
-    # register by. The import-time value is the ADT checkout's id, which is
-    # wrong for a consumer project and counts its own spend twice (#25).
-    # Read from the root that owns the ledger, and only when it is an ADT
+    # One root resolution for the ledger and the id. The id is the one the sync
+    # keys this machine's register by (#25), and is read only in an ADT
     # project, so a render outside one never mints an id file.
     ledger_root = _canonical_root()
-    if (ledger_root / ".adt").is_dir():
-        OWN_MACHINE = machine_id(ledger_root)
-    TOKEN_USAGE = load_token_usage()
-    COST_USAGE = load_cost_usage()
+    OWN_MACHINE = (machine_id(ledger_root) if (ledger_root / ".adt").is_dir()
+                   else None)
+    TOKEN_USAGE = load_token_usage(ledger_root)
+    COST_USAGE = load_cost_usage(ledger_root)
 
     items = load_items()
     OFFBOARD.clear()
