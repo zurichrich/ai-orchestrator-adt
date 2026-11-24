@@ -41,7 +41,7 @@ def _run(monkeypatch, files):
     monkeypatch.setattr(adt_sync, "restamp_closed", lambda *a, **k: [])
     monkeypatch.setattr(adt_sync, "checkpoint_stamp", lambda *a, **k: [])
 
-    def reconcile_one(path, data, cfg, dry_run=False):
+    def reconcile_one(path, data, cfg, dry_run=False, sync=None):
         pushed.append(path)
         return {"path": path, "action": "updated"}
 

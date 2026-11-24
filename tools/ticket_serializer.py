@@ -451,9 +451,15 @@ _META_TRAILER = "<!-- adt:meta %s -->"
 _META_TRAILER_RE = re.compile(r"(?:\n\n|\A)<!-- adt:meta (\{[^\n]*\}) -->\n?\Z")
 
 
+def _meta_carries(key, value) -> bool:
+    # A gate key becomes a label only when it is True, so any other value
+    # (`ui_review_required: false`) has nowhere else to go and rides here.
+    return key not in _META_EXCLUDED or (key in GATE_KEYS and value is not True)
+
+
 def ticket_meta(data: dict) -> dict:
     """The frontmatter keys the meta trailer carries, with their values."""
-    return {k: v for k, v in data.items() if k not in _META_EXCLUDED}
+    return {k: v for k, v in data.items() if _meta_carries(k, v)}
 
 
 def _strip_meta_trailer(body: str) -> str:
@@ -714,7 +720,7 @@ def from_issue(issue: dict, base: dict | None = None) -> dict:
         for k in [k for k in out if k not in _META_EXCLUDED]:
             if k not in _meta:
                 del out[k]          # removed on the machine that published it
-        out.update({k: v for k, v in _meta.items() if k not in _META_EXCLUDED})
+        out.update({k: v for k, v in _meta.items() if _meta_carries(k, v)})
     if not out.get("slug"):
         _carried = _slug_from_trailer(_raw_body)
         if _carried:

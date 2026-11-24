@@ -37,7 +37,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from ticket_serializer import (FILING_LABEL, NON_TICKET_LABELS,  # noqa: E402
                                parse_md, emit_md,
                                to_issue, from_issue,
-                               _derive_state, _strip_slug_trailer)
+                               _derive_state, _strip_slug_trailer,
+                               _strip_meta_trailer, meta_from_body,
+                               ticket_meta)
 
 
 # --------------------------------------------------------------------------
@@ -402,7 +404,8 @@ def pass_lock(cfg: dict):
 # The sidecar's top-level schema — the ONE place the known keys are declared.
 # A key here is recognised as "new format" by _load_state_doc; add new state
 # (like the ADT-101 `pull` block) to this tuple, not to ad-hoc `in` checks.
-_STATE_KEYS = ("file_hashes", "board_index", "pull", "project_ctx", "watch")
+_STATE_KEYS = ("file_hashes", "board_index", "pull", "project_ctx", "watch",
+               "remote_sigs", "conflicts", "stale_meta")
 
 
 def _load_state_doc(cfg: dict) -> dict:
@@ -798,10 +801,155 @@ def _body_differs(current_body, desired_body) -> bool:
             != _strip_slug_trailer(desired_body or ""))
 
 
-def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False) -> dict:
+# --------------------------------------------------------------------------
+# Two machines on one ticket (AO-027).
+#
+# The push used to be authoritative for title and body, and the pull never
+# brought them back, so a second machine kept its old body and its next push
+# replaced the first machine's work without a word. Now the pull carries title
+# and body DOWN, and the push refuses to overwrite an Issue that changed after
+# this machine last saw it.
+#
+# "Last saw it" is the baseline in the sidecar's `remote_sigs`: per Issue
+# number, _remote_sig of the Issue's title and body as this machine last pushed,
+# pulled, or found equal to its own file. GitHub's `updated_at` cannot do this
+# job: the sync's own register and stamp comments move it.
+#
+# A refused push is a CONFLICT, and nothing for that ticket is sent until a
+# person resolves it. Both versions are kept: the local file is untouched apart
+# from a `sync_conflict:` line, GitHub's version is written beside it as
+# `<file>.md.github` (not `.md`, so neither the sync nor the board reads it),
+# and one `adt:conflict` comment on the Issue tells the other developer.
+# Resolving: merge into the .md and delete the `sync_conflict:` line (the push
+# then sends the merge), or delete the .md (the pull rebuilds it from GitHub).
+# The sidecar's `conflicts` entry is what tells a deliberate resolution apart
+# from an Issue that has moved yet again, which is a new conflict.
+# --------------------------------------------------------------------------
+_CONFLICT_COPY_SUFFIX = ".github"
+
+
+def _remote_sig(title, body) -> str:
+    """Hash of an Issue's title and body, slug trailer ignored (ADT-322)."""
+    h = hashlib.sha1()
+    h.update((title or "").encode("utf-8"))
+    h.update(b"\x00")
+    h.update(_strip_slug_trailer(body or "").encode("utf-8"))
+    return h.hexdigest()
+
+
+def _conflict_marker(tix: str) -> str:
+    return f"<!-- adt:conflict tix={tix} -->"
+
+
+def _conflict_body(tix: str, machine, copy_name: str, resolved: bool) -> str:
+    if resolved:
+        return (f"{_conflict_marker(tix)}\n\u2705 **Sync conflict on {tix} "
+                f"resolved** on machine `{machine}`.")
+    return (f"{_conflict_marker(tix)}\n\u26a0\ufe0f **Sync conflict on {tix}.** "
+            f"Machine `{machine}` has local changes to this ticket, and this "
+            f"Issue changed after that machine last synced. Neither copy was "
+            f"overwritten, and nothing for this ticket syncs from that machine "
+            f"until it is resolved.\n\n"
+            f"On that machine, GitHub's version is saved beside the ticket as "
+            f"`{copy_name}`. To keep a merged copy, merge it into the ticket "
+            f"file and delete the file's `sync_conflict:` line. To keep GitHub's "
+            f"version, delete the ticket file and the next sync rebuilds it.")
+
+
+def _post_conflict(repo, number, rec: dict, sync: dict, resolved: bool):
+    """Upsert the one conflict comment. Fail-open on an ordinary API error: the
+    file flag and the copy still mark the conflict on this machine."""
+    if "machine" not in sync:
+        sync["machine"] = _machine_id()
+    body = _conflict_body(rec["tix"], sync["machine"],
+                          os.path.basename(rec["copy"]), resolved)
+    try:
+        return _upsert_comment(repo, number, body, rec.get("comment_id"),
+                               marker=_conflict_marker(rec["tix"]))
+    except RateLimitError:
+        raise
+    except GhError:
+        return rec.get("comment_id")
+
+
+def _enter_conflict(path, data, current, cfg, sync, cur_sig) -> dict:
+    number = int(data["issue_number"])
+    key = str(number)
+    copy = path + _CONFLICT_COPY_SUFFIX
+    theirs = from_issue(current, base=dict(data))
+    theirs.pop("sync_conflict", None)
+    with open(copy, "w") as f:
+        f.write(emit_md(theirs))
+    data["sync_conflict"] = cur_sig[:16]
+    _write_back(path, data)
+    rec = dict(sync["conflicts"].get(key) or {})
+    rec.update({"sig": cur_sig, "path": path, "copy": copy,
+                "tix": _canon_tix(str(data.get("id") or f"#{number}"))})
+    rec["comment_id"] = _post_conflict(cfg["repo"], number, rec, sync, False)
+    sync["conflicts"][key] = rec
+    return {"path": path, "slug": data.get("slug"), "action": "conflict",
+            "number": number}
+
+
+def _leave_conflict(key: str, cfg, sync) -> None:
+    """Drop the record and the copy, and mark the comment resolved."""
+    rec = sync["conflicts"].pop(key, None)
+    if not rec:
+        return
+    try:
+        os.remove(rec.get("copy") or "")
+    except OSError:
+        pass
+    rec.setdefault("tix", f"#{key}")
+    rec.setdefault("copy", "")
+    _post_conflict(cfg["repo"], int(key), rec, sync, True)
+
+
+def _conflict_check(path, data, cfg, current, issue, sync):
+    """None when the push may go ahead, else the `conflict` result.
+
+    Four states, in order. The file and the Issue already agree: any conflict is
+    over. The file is flagged: still in conflict. The flag was deleted while a
+    conflict is recorded: a resolution when the Issue is unchanged since the
+    conflict, a new conflict when it moved again. Otherwise the Issue moved
+    since this machine's baseline: a new conflict."""
+    key = str(int(data["issue_number"]))
+    cur = _remote_sig(current.get("title"), current.get("body"))
+    want = _remote_sig(issue.get("title"), issue.get("body"))
+    rec = sync["conflicts"].get(key)
+    if cur == want:
+        if rec:
+            _leave_conflict(key, cfg, sync)
+        if data.pop("sync_conflict", None) is not None:
+            _write_back(path, data)
+        sync["remote_sigs"][key] = cur
+        return None
+    if data.get("sync_conflict"):
+        if rec and rec.get("sig") != cur:
+            return _enter_conflict(path, data, current, cfg, sync, cur)
+        return {"path": path, "slug": data.get("slug"), "action": "conflict",
+                "number": int(key)}
+    if rec:
+        if rec.get("sig") == cur:
+            _leave_conflict(key, cfg, sync)
+            sync["remote_sigs"][key] = cur
+            return None
+        return _enter_conflict(path, data, current, cfg, sync, cur)
+    base = sync["remote_sigs"].get(key)
+    if base and base != cur:
+        return _enter_conflict(path, data, current, cfg, sync, cur)
+    return None
+
+
+def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False,
+                  sync: dict | None = None) -> dict:
     """Reconcile a single cache .md to its Issue. Returns an action summary.
     Writes issue_number/issue_node_id back into the .md when an Issue is
-    created. Idempotent: a converged ticket produces {'action': 'noop'}."""
+    created. Idempotent: a converged ticket produces {'action': 'noop'}.
+
+    `sync` carries the AO-027 baselines and conflicts (see _conflict_check).
+    Without it the push behaves as it did before AO-027, which is what a
+    caller with no sidecar (the ordered migration) needs."""
     repo = cfg["repo"]
     issue = to_issue(data)
     # A title is mandatory for `gh issue create/edit` — never pass None. Fall
@@ -852,6 +1000,9 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False) -> di
                           "duplicate": "duplicate"}.get(api_reason, "completed")
             _gh(["issue", "close", str(new_number), "--repo", repo,
                  "--reason", cli_reason])
+        if sync is not None:
+            sync["remote_sigs"][str(new_number)] = _remote_sig(
+                issue["title"], issue.get("body", "") or "(no body)")
         actions["action"] = "created"
         actions["number"] = new_number
         # A fresh Issue got its stage label at creation — same lifecycle
@@ -893,6 +1044,11 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False) -> di
         actions["changes"] = changed
         return actions
 
+    if sync is not None:
+        hold = _conflict_check(path, data, cfg, current, issue, sync)
+        if hold:
+            return hold
+
     edit_args = ["issue", "edit", str(number), "--repo", repo]
     if (current.get("title") or "") != (issue.get("title") or ""):
         edit_args += ["--title", issue["title"]]
@@ -912,6 +1068,9 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False) -> di
             actions["stage_label_changed"] = True
     if len(edit_args) > 5:  # more than the base verb -> something to edit
         _gh(edit_args)
+    if sync is not None:
+        sync["remote_sigs"][str(number)] = _remote_sig(issue.get("title"),
+                                                      issue.get("body"))
 
     # State (open/closed) is a separate gh verb.
     want_state = (issue.get("state") or "open").lower()
@@ -1593,6 +1752,75 @@ def _relocate_to_stage(path: str, data: dict, recovered: dict, cfg: dict,
 # the sweep is what still reconstructs a locally-deleted cache file whose Issue
 # hasn't updated, which an incremental pull can never see.
 # --------------------------------------------------------------------------
+def _pull_content(path, data, issue, clean: bool, sync: dict):
+    """Carry the Issue's title, body and metadata down into the file (AO-027).
+
+    Only when the file holds no unpushed local change (`clean`, the same test
+    as the relocation's guard 3): a file with one is the push's business, and
+    the push runs first in a pass. Returns a result record carrying the
+    post-write hash for reconcile_all to record, or None.
+
+    One special case is the migration. An Issue whose ticket predates AO-027
+    has no meta trailer. When its title and body text already match this file,
+    this machine is in sync and has simply not published its metadata, so the
+    record asks reconcile_all to re-arm the push instead of taking anything.
+    When the text differs, this machine is the stale one: it takes the Issue's
+    text and keeps its own metadata, because the Issue carried none, and is
+    remembered in `stale_meta` so it never publishes that metadata."""
+    key = str(issue.get("number"))
+    cur = _remote_sig(issue.get("title"), issue.get("body"))
+    want = to_issue(data)
+    if ((issue.get("title") or "") == (want.get("title") or "")
+            and not _body_differs(issue.get("body"), want.get("body"))):
+        sync["remote_sigs"][key] = cur
+        return None
+    remote_meta = meta_from_body(_strip_slug_trailer(issue.get("body") or ""))
+    theirs = from_issue(issue, base=dict(data))
+    candidate = dict(data)
+    candidate["title"] = theirs.get("title")
+    candidate["body"] = theirs.get("body")
+    if remote_meta is not None:
+        for k in list(ticket_meta(candidate)):
+            if k not in theirs:
+                del candidate[k]
+        candidate.update(ticket_meta(theirs))
+    if theirs.get("done_evidence") is not None:
+        candidate["done_evidence"] = theirs["done_evidence"]
+    if remote_meta is not None:
+        sync["stale_meta"].pop(key, None)
+
+    # Compare what the Issue would hold after a round trip through the FILE,
+    # not the raw text. The cache format cannot represent every body exactly
+    # (emit_md/parse_md normalise a final newline), and the Issue's body holds
+    # the generated DoD block while the file's need not. A raw comparison
+    # would take the same content every tick, or judge an in-sync machine
+    # stale.
+    def _as_pushed(d):
+        i = to_issue(parse_md(emit_md(d)))
+        return _remote_sig(i.get("title"), i.get("body"))
+
+    if _as_pushed(candidate) == _as_pushed(data):
+        sync["remote_sigs"][key] = cur
+        # A machine that had to take the text is the stale one, and its
+        # metadata is no fresher than its text was, so it never publishes it.
+        if (remote_meta is None and ticket_meta(data) and clean
+                and key not in sync["stale_meta"]):
+            return {"action": "republish", "number": issue.get("number"),
+                    "slug": data.get("slug"), "path": path}
+        return None
+    if not clean:
+        return None
+    if remote_meta is None:
+        sync["stale_meta"][key] = True
+    data.clear()
+    data.update(candidate)
+    _write_back(path, data)
+    sync["remote_sigs"][key] = cur
+    return {"action": "pulled-content", "number": issue.get("number"),
+            "slug": data.get("slug"), "path": path,
+            "hash": _push_hash(parse_md(emit_md(data)))}
+
+
 _FULL_SWEEP_INTERVAL = 3600.0  # s between watermark-bypassing full pulls
 _REST_PAGE_SIZE = 100
 
@@ -1748,7 +1976,7 @@ def _created_within_grace(created_at: str | None,
 
 
 def pull_all(cfg: dict, pushed_hashes: dict | None = None,
-             full: bool = False) -> list:
+             full: bool = False, sync: dict | None = None) -> list:
     """Bring GitHub-owned fields back into the cache; reconstruct missing cache
     files. Returns action summaries. Idempotent.
 
@@ -1803,6 +2031,9 @@ def pull_all(cfg: dict, pushed_hashes: dict | None = None,
             if num in by_number:
                 path, data = by_number[num]
                 recovered = from_issue(issue, base={})  # GH view of the fields
+                # AO-027: decided BEFORE anything mutates `data`, because the
+                # relocation below changes it and would fail this test after.
+                clean = pushed_hashes.get(path) == _push_hash(data)
                 changed = False
                 for k in _PULL_OWNED:
                     if data.get(k) != recovered.get(k):
@@ -1819,10 +2050,24 @@ def pull_all(cfg: dict, pushed_hashes: dict | None = None,
                 # of a claim GitHub already holds, gated on the machine that
                 # made it. A gate here could refuse a state GitHub has, and
                 # leave the two sides divergent for good.
+                # A ticket in conflict keeps its lane and its content until a
+                # person resolves it; that is the "both versions are kept"
+                # half of AO-027. Only the pull-owned fields are refreshed.
+                if data.get("sync_conflict"):
+                    if changed:
+                        _write_back(path, data)
+                    continue
                 moved = _relocate_to_stage(path, data, recovered, cfg,
                                            pushed_hashes)
                 if moved:
                     results.append(moved)
+                    path = moved["path"]
+                took = (_pull_content(path, data, issue, clean, sync)
+                        if sync is not None else None)
+                if took:
+                    results.append(took)
+                elif moved:
+                    pass
                 elif changed:
                     _write_back(path, data)
                     results.append({"action": "pulled", "number": num,
@@ -1886,6 +2131,14 @@ def pull_all(cfg: dict, pushed_hashes: dict | None = None,
                 path = _cache_path_for(cfg, data)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 _write_back(path, data)
+                if sync is not None:
+                    # AO-027: deleting the file is how a person keeps GitHub's
+                    # version of a conflicted ticket. The rebuild IS that
+                    # resolution, so close the conflict it leaves behind.
+                    if str(num) in sync["conflicts"]:
+                        _leave_conflict(str(num), cfg, sync)
+                    sync["remote_sigs"][str(num)] = _remote_sig(
+                        issue.get("title"), issue.get("body"))
                 results.append({"action": "reconstructed", "number": num,
                                 "slug": data.get("slug")})
 
@@ -1953,6 +2206,19 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     # everything: it makes no writes and the caller wants the full diff.)
     state = {} if dry_run else _load_sync_state(cfg)
     new_state = dict(state)
+    # AO-027 baselines and conflicts. None on a dry run, which writes nothing.
+    sync = None
+    if not dry_run:
+        doc = _load_state_doc(cfg)
+        sync = {"remote_sigs": dict(doc.get("remote_sigs") or {}),
+                "conflicts": dict(doc.get("conflicts") or {}),
+                "stale_meta": dict(doc.get("stale_meta") or {})}
+
+    def _save_sync():
+        if sync is not None:
+            _update_state_doc(cfg, {"remote_sigs": sync["remote_sigs"],
+                                    "conflicts": sync["conflicts"],
+                                    "stale_meta": sync["stale_meta"]})
 
     # Two cache files for one Issue (ADT-354): whichever is pushed last wins,
     # and a stale stub that says `state: open` reopens a closed Issue and moves
@@ -1974,7 +2240,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
                             "action": "noop"})
             continue
         try:
-            r = reconcile_one(path, data, cfg, dry_run=dry_run)
+            r = reconcile_one(path, data, cfg, dry_run=dry_run, sync=sync)
             results.append(r)
             # Record the POST-reconcile hash by RE-PARSING the file:
             # reconcile_one may have written issue_number back, and that field
@@ -1993,6 +2259,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
             results.append({"path": path, "action": "rate-limited",
                             "error": str(e)})
             _persist_state(cfg, new_state)
+            _save_sync()
             return results
         except GhError as e:
             results.append({"path": path, "action": "error", "error": str(e)})
@@ -2020,8 +2287,14 @@ def reconcile_all(project_root: str, dry_run: bool = False,
 
     # PULL second (Issues -> cache): GitHub-owned fields + missing files.
     if pull and not dry_run:
+        # A conflicted file deleted to keep GitHub's version must be rebuilt
+        # now, not at the next hourly sweep: an incremental pull never fetches
+        # an Issue that has not moved since the watermark.
+        if any(not os.path.exists(c.get("path") or "")
+               for c in sync["conflicts"].values()):
+            full = True
         try:
-            pulled = pull_all(cfg, pushed_hashes=state, full=full)
+            pulled = pull_all(cfg, pushed_hashes=state, full=full, sync=sync)
             results.extend(pulled)
             # AO-007: a relocated ticket is ALREADY converged — its new content
             # is what GitHub says — so record its hash under the new path and
@@ -2035,6 +2308,12 @@ def reconcile_all(project_root: str, dry_run: bool = False,
                 if r.get("action") == "relocated" and r.get("hash"):
                     new_state.pop(r.get("old_path"), None)
                     new_state[r["path"]] = r["hash"]
+                elif r.get("action") == "pulled-content":
+                    # Same reason as the relocation: recording the hash is what
+                    # stops the content just pulled from going straight back up.
+                    new_state[r["path"]] = r["hash"]
+                elif r.get("action") == "republish":
+                    new_state.pop(r["path"], None)   # next push sends the meta
         except RateLimitError as e:
             results.append({"action": "rate-limited", "error": f"pull: {e}"})
         except GhError as e:
@@ -2042,6 +2321,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
 
     if not dry_run:
         _persist_state(cfg, new_state)
+        _save_sync()
     return results
 
 
