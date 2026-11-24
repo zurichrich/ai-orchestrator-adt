@@ -4,10 +4,14 @@
 """Tests for adt_register_migrate: it re-keys only this machine's register
 comments from hostname to install id, keeps every total, and leaves other
 machines' registers alone."""
+import io
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
+import uuid
+from contextlib import redirect_stdout
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -147,6 +151,32 @@ class DryRunTest(unittest.TestCase):
         self.assertIsNotNone(ap, "--apply must exist")
         self.assertIn("store_true", ap,
                       "--apply must be a flag that defaults to off")
+
+
+class RootTest(unittest.TestCase):
+    """#25: the new key is the --root project's install id. With no root it was
+    the ADT checkout's, so a migration run against a consumer repo keyed that
+    machine's registers by an id the consumer never reads as its own."""
+
+    def test_the_new_key_is_the_project_roots_id(self):
+        known = str(uuid.uuid4())
+        saved = (m.issues_with_registers, m.own_hostname)
+        try:
+            m.issues_with_registers = lambda repo: []
+            m.own_hostname = lambda: "some-host"
+            with tempfile.TemporaryDirectory() as root:
+                state = os.path.join(root, ".adt", "state")
+                os.makedirs(state)
+                with open(os.path.join(state, "install-id"), "w") as f:
+                    f.write(known + "\n")
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    rc = m.main(["--repo", "o/r", "--root", root])
+            self.assertEqual(rc, 0)
+            self.assertIn("would re-key 0 comment(s) to %s" % known, out.getvalue())
+            self.assertNotIn(bk.machine_id(bk.REPO), out.getvalue())
+        finally:
+            m.issues_with_registers, m.own_hostname = saved
 
 
 if __name__ == "__main__":
