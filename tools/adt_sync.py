@@ -469,7 +469,11 @@ def _persist_state(cfg: dict, file_hashes: dict, sync: dict | None = None
     clobbering it with {} — otherwise an idle tick would discard the cache and
     force the next change to re-walk the board. Writes via _update_state_doc,
     so keys this writer doesn't own (the ADT-101 pull state) survive."""
-    updates = {"file_hashes": file_hashes, **(sync or {})}
+    updates = {"file_hashes": file_hashes}
+    if sync is not None:
+        # Only the persisted keys: `sync` also holds this pass's root and the
+        # cached machine id, which belong to the process, not the sidecar.
+        updates.update({k: sync[k] for k in _SYNC_KEYS})
     key = f"{cfg.get('owner')}/{cfg.get('project_number')}"
     board = _BOARD_INDEX.get(key)
     if board:
@@ -863,7 +867,7 @@ def _post_conflict(repo, number, rec: dict, sync: dict, resolved: bool):
     """Upsert the one conflict comment. Fail-open on an ordinary API error: the
     file flag and the copy still mark the conflict on this machine."""
     if "machine" not in sync:
-        sync["machine"] = _machine_id()
+        sync["machine"] = _machine_id(sync["root"])
     body = _conflict_body(rec["tix"], sync["machine"],
                           os.path.basename(rec["copy"]), resolved)
     try:
@@ -2215,6 +2219,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     if not dry_run:
         doc = _load_state_doc(cfg)
         sync = {k: dict(doc.get(k) or {}) for k in _SYNC_KEYS}
+        sync["root"] = project_root   # for the conflict comment's machine id
 
     # Two cache files for one Issue (ADT-354): whichever is pushed last wins,
     # and a stale stub that says `state: open` reopens a closed Issue and moves

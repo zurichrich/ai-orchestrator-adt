@@ -242,7 +242,9 @@ class Machine:
 def _wire(monkeypatch):
     gh = FakeGitHub()
     monkeypatch.setattr(adt_sync, "_gh", gh)
-    monkeypatch.setattr(adt_sync, "_machine_id", lambda: "machine-b")
+    # Takes the root, as the real one does since AO-025: a stub with no
+    # argument hid a call that would raise TypeError on the first conflict.
+    monkeypatch.setattr(adt_sync, "_machine_id", lambda root: "machine-b")
     for fn in ("checkpoint_tokens", "restamp_closed", "checkpoint_stamp"):
         monkeypatch.setattr(adt_sync, fn, lambda *a, **k: [])
     return gh
@@ -360,6 +362,10 @@ def test_both_changed_keeps_both_and_flags(tmp_path, monkeypatch):
     copy_path = pathlib.Path(str(b.path("qa")) + ".github")
     assert "A's plan" in copy_path.read_text()
     assert len(gh.conflict_comments(42)) == 1
+    [comment] = gh.conflict_comments(42)
+    assert "machine-b" in comment["body"]
+    doc = adt_sync._load_state_doc(adt_sync.load_config(str(b.root)))
+    assert not {"root", "machine"} & set(doc), "process state reached the sidecar"
 
 
 def test_resolving_a_conflict_pushes_the_merged_copy(tmp_path, monkeypatch):
