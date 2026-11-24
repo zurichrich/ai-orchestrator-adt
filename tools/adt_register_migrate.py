@@ -173,6 +173,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="Re-key THIS machine's register comments to its install UUID.")
     ap.add_argument("--repo", required=True, help="owner/name")
+    ap.add_argument("--root", required=True,
+                    help="the project checkout whose install id the registers "
+                         "are re-keyed to. Required: with no root the id would "
+                         "be the ADT checkout's, which is wrong for a consumer "
+                         "repo and makes its own spend count twice (#25)")
     ap.add_argument("--dry-run", action="store_true", default=True,
                     help="report what would change and write nothing. This is "
                          "the DEFAULT; it exists as an explicit flag so the "
@@ -196,7 +201,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     own_key = own_hostname()
-    new_key = bk.machine_id()
+    new_key = bk.machine_id(args.root)
     if own_key == new_key:
         print("nothing to do: registers are already keyed by the install id")
         return 0
