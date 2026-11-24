@@ -1,3 +1,7 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__ · Management report</title>
 <style>
 /* Layout: a programme-office wall chart. Header and scope summary on top, then one
@@ -35,7 +39,7 @@ button{font:inherit;color:inherit}
 /* Header */
 .top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px}
 .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp(28px,4vw,42px);line-height:1;margin:6px 0 0;letter-spacing:-.01em;text-wrap:balance}
+h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp(28px,4vw,42px);line-height:1;margin:6px 0 0;letter-spacing:-.01em;text-wrap:balance;overflow-wrap:anywhere}
 .controls{display:flex;flex-wrap:wrap;gap:10px}
 .seg-ctl{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px}
 .seg-ctl button{border:0;background:transparent;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted)}
@@ -138,6 +142,7 @@ h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp
 .colbtn:hover,.colbtn[aria-expanded="true"]{border-color:var(--line-strong)}
 .colbtn .cnt{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:9px;padding:0 6px;font-variant-numeric:tabular-nums}
 .colmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:min(520px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.16);padding:14px 16px;display:grid;gap:14px}
+.colmenu[hidden]{display:none}
 .cm-h,.colmenu legend{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;padding:0}
 .presets{display:flex;flex-wrap:wrap;gap:6px}
 .presets button{border:1px solid var(--line);background:var(--bg);border-radius:14px;padding:4px 11px;font-size:12.5px;cursor:pointer}
@@ -500,7 +505,7 @@ function render(keepScroll){
   const levelName = S.e==null ? "epics" : "features";
   const chip = S.e!=null ? `<span class="chip" style="--c:${colorVar(S.e)}"></span>` : "";
   const title = S.e==null ? "All epics" : S.f==null ? P.epics[S.e] : P.features[S.e][S.f];
-  $("levelTitle").innerHTML = `${chip}${esc(title)} <small>${L ? L.length+" "+levelName : st.n+" tickets"}</small>`;
+  $("levelTitle").innerHTML = `${chip}${esc(title)} <small>${L ? L.length+" "+levelName : st.n+(st.n===1?" ticket":" tickets")}</small>`;
   const nFeat = S.e==null ? P.features.reduce((a,fs,e)=>a+fs.filter((_,f)=>P.T.some(t=>t.e===e&&t.f===f)).length,0) : null;
   const items = [];
   if (S.e==null) items.push([L.length,"Epics"],[nFeat,"Features"]);
@@ -682,3 +687,4 @@ document.addEventListener("pointerdown", ev => { if (ev.pointerType!=="mouse") {
 
 fromHash();
 </script>
+</html>

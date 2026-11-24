@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.3.0",
-  "source_commit": "6368883e999ef90d82cb51ed95f2063bed932ae4",
+  "source_commit": "d9e9c5d06ba5fb52bc225b033f1bf71edb0547b9",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -190,7 +190,7 @@
     },
     {
       "path": "tools/management_report_template.html",
-      "sha256": "bcc5eec58308fc67efdfdb651b1235dc11cb938be5fc5a3fd76a564facf39c01"
+      "sha256": "7f11a151e86f9b6efc088b1b499e6b903742fae6e6d5087bbd71cf3428e3cdaa"
     },
     {
       "path": "tools/plan-quality-calibration.md",
