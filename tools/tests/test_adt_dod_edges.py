@@ -81,6 +81,18 @@ def test_downstream_grades_normally_once_upstream_is_met(tmp_path):
     assert res["all_green"] is True
 
 
+def test_a_lane_grade_resolves_an_upstream_in_another_lane(tmp_path):
+    """A done-lane condition depending on a build-lane one is graded on a
+    `--lane done` run, which is how the done guard calls check()."""
+    up = _row("true", cid="a")
+    down = _row("false", cid="b", dep="a").replace("lane: build", "lane: done")
+    md = _t(tmp_path, _dod(up, down))
+    res = adt_dod.check(md, str(tmp_path), lane="done", cwd=str(tmp_path))
+    [b] = res["conditions"]
+    assert b["id"] == "b"
+    assert b["passed"] is False, b["why"]
+
+
 def test_conditions_without_depends_on_grade_independently(tmp_path):
     md = _t(tmp_path, _dod(_row("true"), _row("true")))
     res = adt_dod.check(md, str(tmp_path), cwd=str(tmp_path))

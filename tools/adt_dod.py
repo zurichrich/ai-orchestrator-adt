@@ -399,8 +399,7 @@ def check(ticket_md_path, devteam, lane=None, cwd=None):
                     "why": ("done_evidence entry is not a checkable condition "
                             "(no must_run / must_contain_regex): %s" % ev),
                     "id": ev.get("id"), "depends_on": ev.get("depends_on")}
-        if lane is None or cond["lane"] == lane:
-            conditions.append(cond)
+        conditions.append(cond)
     # ADT-114 mech #2 — ORDERING. Where condition B is meaningless until A holds,
     # B must not be reported green ahead of A. Entries carry optional `id:` and
     # `depends_on:` (comma-separated ids); absent keys mean no edges, i.e. exactly
@@ -427,6 +426,10 @@ def check(ticket_md_path, devteam, lane=None, cwd=None):
                                "ahead of what it depends on" % dep)
                 break
 
+    # The lane slice is taken AFTER the edges are resolved: a done-lane
+    # condition may depend on a build-lane one (AO-027's C11 on C1), and slicing
+    # first left the upstream out of by_id, so the downstream was never graded.
+    conditions = [c for c in conditions if lane is None or c["lane"] == lane]
     gradable = [c for c in conditions if c["passed"] is not None]
     failed = [c for c in gradable if c["passed"] is False]
     infra = [c for c in conditions if c["passed"] is None]
