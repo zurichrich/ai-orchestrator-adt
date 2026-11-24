@@ -526,3 +526,26 @@ def test_existing_issue_without_meta_gains_it_from_an_in_sync_machine(
         ticket_serializer._strip_slug_trailer(gh.issues[42]["body"]))
     assert meta is not None and meta["size"] == "L"
     assert "(the plan as first written)" in gh.issues[42]["body"]
+
+
+def test_conflict_comment_is_posted_after_a_rate_limited_first_try(
+        tmp_path, monkeypatch):
+    """The conflict is recorded before its comment is posted, so a rate limit
+    on the post leaves a record the next push can finish, not a flagged file
+    nothing would ever comment on."""
+    gh, a, b = _two_machines(tmp_path, monkeypatch)
+    a.edit(_set_plan("A's plan"))
+    b.edit(_set_log("B's build notes"))
+    a.tick(gh)
+
+    real = adt_sync._upsert_comment
+    def limited(*args, **kwargs):
+        raise adt_sync.RateLimitError("API rate limit exceeded")
+    monkeypatch.setattr(adt_sync, "_upsert_comment", limited)
+    b.tick(gh)
+    assert b.read().get("sync_conflict")
+    assert not gh.conflict_comments(42)
+
+    monkeypatch.setattr(adt_sync, "_upsert_comment", real)
+    b.tick(gh)
+    assert len(gh.conflict_comments(42)) == 1

@@ -486,17 +486,24 @@ def meta_from_body(body: str):
 
 def _with_meta_trailer(body: str, meta: dict) -> str:
     """Body with the meta line appended. Idempotent; with no metadata the body
-    is returned untouched, for the same reason _with_slug_trailer does that."""
-    base = _strip_meta_trailer(body or "")
+    is returned untouched, for the same reason _with_slug_trailer does that.
+
+    A body that already carries a slug trailer has the meta line BEFORE it, out
+    of reach of the end-anchored regex. So the slug trailer is lifted off, the
+    meta line replaced, and the slug trailer put back exactly as it was."""
     if not meta:
         return body or ""
+    body = body or ""
+    no_slug = _strip_slug_trailer(body)
+    slug_tail = body[len(no_slug):]
+    base = _strip_meta_trailer(no_slug)
     # One line, key-sorted so an unchanged ticket produces unchanged bytes.
     # `-->` can occur only inside a JSON string, where `\u003e` is the same
     # character, so escaping it keeps a value from closing the comment.
     js = json.dumps(meta, sort_keys=True, ensure_ascii=False,
                     separators=(",", ":"), default=str).replace("-->", "--\\u003e")
     trailer = _META_TRAILER % js
-    return (base + "\n\n" + trailer) if base else trailer
+    return ((base + "\n\n" + trailer) if base else trailer) + slug_tail
 
 
 # --------------------------------------------------------------------------

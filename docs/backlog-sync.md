@@ -177,7 +177,10 @@ fetch per tick: the metadata comes with the bodies the pull already lists.
 whose title and body already match it publishes its metadata on the next push.
 A machine whose text differs is the stale one: it takes the Issue's text, keeps
 its own metadata, and is recorded in the sidecar's `stale_meta` so it never
-publishes that metadata. Baselines fill in as tickets sync; until a ticket has
+publishes that metadata. Two machines that both hold the Issue's text but
+different metadata will both publish, and the second gets a conflict on that
+ticket, which is flagged and resolved like any other. Baselines fill in as
+tickets sync; until a ticket has
 one, its push behaves as it did before AO-027.
 
 **The relocation does not run the done gate, by design.**

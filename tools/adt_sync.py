@@ -885,8 +885,11 @@ def _enter_conflict(path, data, current, cfg, sync, cur_sig) -> dict:
     rec = dict(sync["conflicts"].get(key) or {})
     rec.update({"sig": cur_sig, "path": path, "copy": copy,
                 "tix": _canon_tix(str(data.get("id") or f"#{number}"))})
-    rec["comment_id"] = _post_conflict(cfg["repo"], number, rec, sync, False)
+    # Recorded BEFORE the comment is posted: a rate limit raised by the post
+    # must not leave a flagged file with no record, which no later pass could
+    # tell apart from a conflict whose comment already exists.
     sync["conflicts"][key] = rec
+    rec["comment_id"] = _post_conflict(cfg["repo"], number, rec, sync, False)
     return {"path": path, "slug": data.get("slug"), "action": "conflict",
             "number": number}
 
@@ -927,6 +930,10 @@ def _conflict_check(path, data, cfg, current, issue, sync):
     if data.get("sync_conflict"):
         if rec and rec.get("sig") != cur:
             return _enter_conflict(path, data, current, cfg, sync, cur)
+        if rec and not rec.get("comment_id"):
+            # The first post failed (rate limit or API error); try again.
+            rec["comment_id"] = _post_conflict(cfg["repo"], int(key), rec,
+                                               sync, False)
         return {"path": path, "slug": data.get("slug"), "action": "conflict",
                 "number": int(key)}
     if rec:
