@@ -2079,3 +2079,5 @@ def dod_amendments(ticket_md_path):
 if __name__ == "__main__":
     import sys
     sys.exit(_cli(sys.argv[1:]))
+
+# adt-bundle: v0.3.0

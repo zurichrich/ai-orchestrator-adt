@@ -806,3 +806,5 @@ if __name__ == "__main__":
     import sys
     text = sys.stdin.read()
     print(json.dumps(to_issue(parse_md(text)), indent=2))
+
+# adt-bundle: v0.3.0
