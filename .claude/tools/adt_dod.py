@@ -763,6 +763,22 @@ def _serializer():
     return ticket_serializer
 
 
+def ticket_field(ticket_md_path, key):
+    """One frontmatter field as a stripped string, or None when it is absent,
+    null or empty, or the file or the serializer cannot be read. The reader
+    ticket_track and the done-guard's plan gate share (AO-028)."""
+    ticket_serializer = _serializer()
+    if ticket_serializer is None:
+        return None
+    try:
+        data = ticket_serializer.parse_md(
+            open(ticket_md_path, encoding="utf-8").read())
+    except OSError:
+        return None
+    v = data.get(key)
+    return v.strip() if isinstance(v, str) and v.strip() else None
+
+
 def ticket_track(ticket_md_path):
     """The ticket's `track:` tier, lowercased — None when the field is absent.
 
@@ -780,16 +796,8 @@ def ticket_track(ticket_md_path):
     """
     # None -> plan_gate_applies reads it as `full`, the pre-tier behaviour.
     # Failing CLOSED matters: the alternative is an exception out of --gate.
-    ticket_serializer = _serializer()
-    if ticket_serializer is None:
-        return None
-    try:
-        data = ticket_serializer.parse_md(
-            open(ticket_md_path, encoding="utf-8").read())
-    except OSError:
-        return None
-    v = data.get("track")
-    return v.strip().lower() if isinstance(v, str) and v.strip() else None
+    v = ticket_field(ticket_md_path, "track")
+    return v.lower() if v else None
 
 
 def plan_gate_applies(ticket_md_path, calibration_path=None):

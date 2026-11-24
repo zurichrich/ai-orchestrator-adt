@@ -145,42 +145,40 @@ def rollup(rows: list[dict], today: str) -> dict:
 def build(items, project: str = "", today: str | None = None) -> dict:
     """The page's data: epics, features, owners, ticket rows and roll-ups."""
     today = today or date.today().isoformat()
-    rows = [ticket_row(it, today) for it in items]
-    epics: list[str] = []
-    features: list[list[str]] = []
-    for r in sorted(rows, key=lambda r: (r["epic"] == UNASSIGNED, r["epic"].lower())):
-        if r["epic"] not in epics:
-            epics.append(r["epic"])
-            features.append([])
-    for r in sorted(rows, key=lambda r: (r["feature"] == UNASSIGNED, r["feature"].lower())):
-        fs = features[epics.index(r["epic"])]
-        if r["feature"] not in fs:
-            fs.append(r["feature"])
+    return assemble([ticket_row(it, today) for it in items], project, today)
 
-    def members(e, f=None):
-        return [r for r in rows if r["epic"] == epics[e]
-                and (f is None or r["feature"] == features[e][f])]
 
-    epic_po = [_owner(members(e)) for e in range(len(epics))]
+def assemble(rows: list[dict], project: str, today: str) -> dict:
+    """build() over rows already read, so the CLI reads each ticket once."""
+    by_epic: dict[str, list[dict]] = {}
+    by_feature: dict[str, dict[str, list[dict]]] = {}
+    last = lambda name: (name == UNASSIGNED, name.lower())  # noqa: E731
+    for r in sorted(rows, key=lambda r: (last(r["epic"]), last(r["feature"]))):
+        by_epic.setdefault(r["epic"], []).append(r)
+        by_feature.setdefault(r["epic"], {}).setdefault(r["feature"], []).append(r)
+    epics = list(by_epic)
+    features = [list(by_feature[e]) for e in epics]
+    index = {(e, f): (i, j) for i, e in enumerate(epics)
+             for j, f in enumerate(features[i])}
+
+    epic_po = [_owner(by_epic[e]) for e in epics]
     feat_po = []
-    for e, fs in enumerate(features):
-        owners = [_owner(members(e, f)) for f in range(len(fs))]
-        feat_po.append([[own or epic_po[e], own is None or own == epic_po[e]]
-                        for own in owners])
-
     rollups = {"all": rollup(rows, today)}
-    for e, fs in enumerate(features):
-        rollups[f"e{e}"] = rollup(members(e), today)
-        for f in range(len(fs)):
-            rollups[f"e{e}-f{f}"] = rollup(members(e, f), today)
+    for i, e in enumerate(epics):
+        rollups[f"e{i}"] = rollup(by_epic[e], today)
+        owners = []
+        for j, f in enumerate(features[i]):
+            members = by_feature[e][f]
+            rollups[f"e{i}-f{j}"] = rollup(members, today)
+            own = _owner(members)
+            owners.append([own or epic_po[i], own is None or own == epic_po[i]])
+        feat_po.append(owners)
 
-    tickets = []
-    for r in rows:
-        e = epics.index(r["epic"])
-        tickets.append([r["id"], r["title"], e, features[e].index(r["feature"]),
-                        r["stage"], r["priority"], r["type"], r["start"], r["finish"],
-                        r["size"], r["cost"], r["tier"], r["devs"],
-                        r["planned_start"], r["planned_finish"], r["planned_cost"]])
+    tickets = [[r["id"], r["title"], *index[(r["epic"], r["feature"])],
+                r["stage"], r["priority"], r["type"], r["start"], r["finish"],
+                r["size"], r["cost"], r["tier"], r["devs"],
+                r["planned_start"], r["planned_finish"], r["planned_cost"]]
+               for r in rows]
     return {
         "name": project or "Project",
         "built": today,
@@ -218,21 +216,19 @@ _LANES = ("ideas", "planned", "building", "qa", "blocked", "ready-to-release", "
 class _Ticket:
     """The few Item fields ticket_row reads, from a cache file.
 
-    The CLI runs from a project's installed .claude/tools/, where
-    build_kanban is not installed, so it reads the frontmatter itself. Cost is
-    not needed to check or list groups."""
+    The CLI runs from a project's installed .claude/tools/, where build_kanban
+    is not installed, so it reads the frontmatter with ticket_serializer, which
+    is. Cost is not needed to check or list groups."""
 
     def __init__(self, path: Path):
-        text = path.read_text(encoding="utf-8")
-        head = text[4:].split("\n---", 1)[0] if text.startswith("---\n") else ""
-        self.fm = {}
-        for ln in head.splitlines():
-            if ln[:1].strip() and ":" in ln:
-                k, _, v = ln.partition(":")
-                self.fm[k.strip()] = v.strip()
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from ticket_serializer import parse_md
+        data = parse_md(path.read_text(encoding="utf-8"))
+        body = data.pop("body", "")
+        self.fm = {k: v for k, v in data.items() if v is not None}
         self.slug = _field(self.fm, "slug") or path.stem
         self.id = _field(self.fm, "id").upper()
-        self.title = next((ln[2:].strip() for ln in text.splitlines()
+        self.title = next((ln[2:].strip() for ln in body.splitlines()
                            if ln.startswith("# ")), self.slug)
         self.status = path.parent.name
         self.priority = _field(self.fm, "priority").upper()
@@ -246,10 +242,9 @@ def _load(cache: str):
             if p.parent.name in _LANES]
 
 
-def problems(items, data: dict) -> list[str]:
+def problems(rows: list[dict], data: dict) -> list[str]:
     """Every ticket with no epic or feature, and every epic with no owner."""
-    out = [f"{r['id']}: no epic or feature"
-           for r in (ticket_row(it, data["built"]) for it in items) if not r["assigned"]]
+    out = [f"{r['id']}: no epic or feature" for r in rows if not r["assigned"]]
     out += [f"epic '{name}': no product owner"
             for name, po in zip(data["epics"], data["epicPO"])
             if name != UNASSIGNED and not po]
@@ -267,7 +262,9 @@ def main(argv=None) -> int:
         print(f"not a directory: {cache}", file=sys.stderr)
         return 2
     items = _load(cache)
-    data = build(items)
+    today = date.today().isoformat()
+    rows = [ticket_row(it, today) for it in items]
+    data = assemble(rows, "", today)
     if a.list_groups:
         for e, name in enumerate(data["epics"]):
             print(f"{name}  (owner: {data['epicPO'][e] or '-'})")
@@ -275,7 +272,7 @@ def main(argv=None) -> int:
                 po, inh = data["featPO"][e][f]
                 print(f"  {feat}  (owner: {po or '-'}{', inherited' if inh and po else ''})")
         return 0
-    found = problems(items, data)
+    found = problems(rows, data)
     for p in found:
         print(p)
     if found:

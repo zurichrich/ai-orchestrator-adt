@@ -27,6 +27,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ticket_serializer import parse_md  # noqa: E402
 
+# Matched within the frontmatter head only. stamp() splices one line rather
+# than re-emitting the head with emit_md, which would reorder every key and
+# make each close a whole-frontmatter diff on the Issue.
 _DEVS_LINE = re.compile(r"^devs:.*$", re.M)
 
 
@@ -50,11 +53,6 @@ def login(repo: str, sha: str) -> str | None:
     return name if out.returncode == 0 and name and name != "null" else None
 
 
-def _has_devs(text: str) -> bool:
-    fm = text.split("\n---", 1)[0] if text.startswith("---") else ""
-    return bool(_DEVS_LINE.search(fm))
-
-
 def stamp(path: Path, repo: str) -> list[str] | None:
     """Write `devs:` into one ticket. None when it has no linked commits."""
     text = path.read_text(encoding="utf-8")
@@ -74,11 +72,6 @@ def stamp(path: Path, repo: str) -> list[str] | None:
         head = head + "\n" + line
     path.write_text("---\n" + head + sep + rest, encoding="utf-8")
     return devs
-
-
-def tickets(cache: Path):
-    for p in sorted(cache.glob("*/*/*.md")):
-        yield p
 
 
 def default_repo() -> str:
@@ -103,9 +96,11 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     if a.check:
-        missing = [p for p in tickets(Path(a.check))
-                   if commits_of(p.read_text(encoding="utf-8"))
-                   and not _has_devs(p.read_text(encoding="utf-8"))]
+        missing = []
+        for p in sorted(Path(a.check).glob("*/*/*.md")):
+            fm = parse_md(p.read_text(encoding="utf-8"))
+            if fm.get("commits") and "devs" not in fm:
+                missing.append(p)
         for p in missing:
             print(f"{p}: commits but no devs:")
         return 1 if missing else 0
@@ -114,7 +109,7 @@ def main(argv=None) -> int:
     if not repo:
         print("no repo: pass --repo or set repo: in .adt/config.yaml", file=sys.stderr)
         return 2
-    paths = list(tickets(Path(a.all))) if a.all else [Path(a.ticket)] if a.ticket else []
+    paths = sorted(Path(a.all).glob("*/*/*.md")) if a.all else [Path(a.ticket)] if a.ticket else []
     if not paths:
         ap.error("give a ticket, --all <cache> or --check <cache>")
     for p in paths:

@@ -35,7 +35,7 @@ def _render(cache: Path) -> str:
 
 
 def _data(html: str) -> dict:
-    m = re.search(r'const PROJECTS = \{"p": (.*?)\};\n', html, re.S)
+    m = re.search(r'const P = (.*?);\n', html, re.S)
     assert m, "no embedded data"
     return json.loads(m.group(1))
 

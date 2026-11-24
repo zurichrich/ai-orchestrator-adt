@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.3.0",
-  "source_commit": "d9e9c5d06ba5fb52bc225b033f1bf71edb0547b9",
+  "source_commit": "2f0aa5172df68b2855262df5d59f976323c6ac3a",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -106,7 +106,7 @@
     },
     {
       "path": "hooks/adt-done-guard.sh",
-      "sha256": "6334924884e430172d767495aa79abaebd3c40ed8f2a45680d6992455d4e05ef"
+      "sha256": "f35bfb8da9b1745ecd06be2cbef66e1963da09a0afdbbced59b0f20588f14011"
     },
     {
       "path": "hooks/adt-mark-tix.sh",
@@ -178,19 +178,19 @@
     },
     {
       "path": "tools/adt_devs.py",
-      "sha256": "fc4f85b944a2087d099162586dfedd40bc70e6d07e4f8f80cfc4865c5a26c4e2"
+      "sha256": "7303520bc8f5da37f23bc825e9f45cd5f2d5649d4145056f7044c3025d18b0d3"
     },
     {
       "path": "tools/adt_dod.py",
-      "sha256": "8dbad815528c55e83ac0bd0f135f765ae4579b28270054c2108f4a4e081c1471"
+      "sha256": "4662c2a7c6dfd34df66a3cbc19985102e382100478c844b2f861bedcad0f9098"
     },
     {
       "path": "tools/management_report.py",
-      "sha256": "2eb61180448d86c3a0e152037f916496892d060df1f84d3be02e4a775cd7c362"
+      "sha256": "dbb7d53282ad57f6b234d4127ef1d5752edf52e89263773713556032894cc0ee"
     },
     {
       "path": "tools/management_report_template.html",
-      "sha256": "7f11a151e86f9b6efc088b1b499e6b903742fae6e6d5087bbd71cf3428e3cdaa"
+      "sha256": "12cb2be02c337df683b0f732beebd90304db5d6616d70c0897d288ca6f1f96a6"
     },
     {
       "path": "tools/plan-quality-calibration.md",

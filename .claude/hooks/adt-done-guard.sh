@@ -362,14 +362,7 @@ def deny(why):
     sys.exit(0)
 if adt_dod.ticket_track(md) not in ("fast", "standard", "full"):
     deny("done-guard: plan gate - the ticket has no track. Set track: to fast, standard or full (/adt-plan step 4), then move it into planned/.")
-text = open(md, encoding="utf-8").read()
-head = text[4:].split("\n---", 1)[0] if text.startswith("---\n") else ""
-fm = {}
-for ln in head.splitlines():
-    if ln[:1].strip() and ":" in ln:
-        k, _, v = ln.partition(":")
-        fm[k.strip()] = v.strip().strip(chr(34) + chr(39))
-missing = [k for k in ("epic", "feature") if fm.get(k, "").lower() in ("", "null", "none", "~")]
+missing = [k for k in ("epic", "feature") if not adt_dod.ticket_field(md, k)]
 if missing:
     deny("done-guard: plan gate - the ticket has no " + " or ".join(missing) + ". Set epic: and feature: (the existing names: python3 .claude/tools/management_report.py --list-groups <cache>), then move it into planned/.")
 ' 2>/dev/null || true
