@@ -161,7 +161,9 @@ your paths never enter git. Then it runs the whole setup: installs the `/adt-*`
 commands + `.claude/` defaults, creates the GitHub labels + Projects board,
 **adopts your existing issues into the cache**, and renders the board. When it
 finishes it prints, and writes into `.adt/BACKLOG.md`, the links to
-your **GitHub board** and your local **`kanban.html`**.
+your **GitHub board** and your local **`kanban.html`**. Beside the board it writes
+`.adt/management-report.html`: the project's epics, features and tickets on a
+timeline, with owners, devs, plan against actual, and cost.
 
 **A second machine, or a teammate, joins the install.** Run the same command in
 their clone. Before it asks anything, the installer reads the ADT layer

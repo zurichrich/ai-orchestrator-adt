@@ -356,6 +356,11 @@ done
 # pricing.json lands NEXT TO the pricer because that is where adt_cost looks
 # first; a project may still override it with .adt/pricing.json or $ADT_PRICING.
 [[ -e "$ADT_DIR/tools/adt_cost.py" ]] && copy "$ADT_DIR/tools/adt_cost.py" "$CLAUDE/tools/adt_cost.py"
+# AO-028: /adt-brief lists the epics with management_report.py and /adt-close
+# stamps devs: with adt_devs.py, both from a project session with no $ADT_DIR.
+for _t in management_report.py management_report_template.html adt_devs.py; do
+  [[ -e "$ADT_DIR/tools/$_t" ]] && copy "$ADT_DIR/tools/$_t" "$CLAUDE/tools/$_t"
+done
 [[ -e "$ADT_DIR/tools/adt_backfill_cost.py" ]] && copy "$ADT_DIR/tools/adt_backfill_cost.py" "$CLAUDE/tools/adt_backfill_cost.py"
 [[ -e "$ADT_DIR/defaults/pricing.json" ]] && copy "$ADT_DIR/defaults/pricing.json" "$CLAUDE/tools/pricing.json"
 

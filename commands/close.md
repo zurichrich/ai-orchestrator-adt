@@ -144,6 +144,11 @@ checking. An unbound close is one that hook cannot check.
      you measured it, or `none` if it really adds nothing. The done-guard hook
      (gate #4) denies the move to `done/` without it on those paths. A measured
      range is better than a blank field; precision is not the point.
+   - **Stamp `devs:`** with the GitHub handles of the people who wrote the
+     linked commits (AO-028, shown as Dev on the management report):
+     `python3 .claude/tools/adt_devs.py <ticket.md>`. It resolves each commit
+     in `commits:` through REST and skips a commit with no GitHub login rather
+     than guessing one. Run it after `commits:` is final.
    - **Do not repeat the dollar figure in prose.** The sync pushes the stamped
      `cost_usd:` as a structured comment and pushes it again when it changes. A
      number typed into prose never updates, and the ticket ends up showing

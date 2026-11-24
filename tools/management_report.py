@@ -212,11 +212,38 @@ def render(items, project: str = "", today: str | None = None) -> str:
 
 # ── CLI ───────────────────────────────────────────────────────────────
 
+_LANES = ("ideas", "planned", "building", "qa", "blocked", "ready-to-release", "done")
+
+
+class _Ticket:
+    """The few Item fields ticket_row reads, from a cache file.
+
+    The CLI runs from a project's installed .claude/tools/, where
+    build_kanban is not installed, so it reads the frontmatter itself. Cost is
+    not needed to check or list groups."""
+
+    def __init__(self, path: Path):
+        text = path.read_text(encoding="utf-8")
+        head = text[4:].split("\n---", 1)[0] if text.startswith("---\n") else ""
+        self.fm = {}
+        for ln in head.splitlines():
+            if ln[:1].strip() and ":" in ln:
+                k, _, v = ln.partition(":")
+                self.fm[k.strip()] = v.strip()
+        self.slug = _field(self.fm, "slug") or path.stem
+        self.id = _field(self.fm, "id").upper()
+        self.title = next((ln[2:].strip() for ln in text.splitlines()
+                           if ln.startswith("# ")), self.slug)
+        self.status = path.parent.name
+        self.priority = _field(self.fm, "priority").upper()
+        self.size = _field(self.fm, "size").upper()
+        self.closed = _field(self.fm, "closed")
+        self.cost, self.cost_tier = None, "unattributed"
+
+
 def _load(cache: str):
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import build_kanban
-    build_kanban.configure(cache, backlog_root="")
-    return build_kanban.load_items()
+    return [_Ticket(p) for p in sorted(Path(cache).glob("*/*/*.md"))
+            if p.parent.name in _LANES]
 
 
 def problems(items, data: dict) -> list[str]:

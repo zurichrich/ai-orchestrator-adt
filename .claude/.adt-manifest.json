@@ -1,188 +1,200 @@
 {
   "schema": 2,
-  "bundle_version": "0.2.0",
-  "source_commit": "c0f48f813c61bc3be2393c6dccf28b2fd8835d06",
+  "bundle_version": "0.3.0",
+  "source_commit": "6368883e999ef90d82cb51ed95f2063bed932ae4",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
       "path": "agents/adt-critical-path-reviewer.md",
-      "sha256": "b68dac35193dee81d49b546cce0fe874fd61e524f2ba2189c8d4bb943268739c"
+      "sha256": "e0a849a3077305c9554f4de2ec4a60f7c0c4cb7066af49e3f2356f9db065ad76"
     },
     {
       "path": "agents/adt-design-reviewer.md",
-      "sha256": "d810bb517e049b6e82272d351c347e364f2382937aa01e5c1e8343a54e6bbfdb"
+      "sha256": "a5795e79a6c7a90e3a44e29a3a1cf83e75561594fa045c0318e40fd94738b41c"
     },
     {
       "path": "agents/adt-dod-coverage-reviewer.md",
-      "sha256": "a0a7aae4e3d8e143021ca923f6cbc61913161228b413df166313773d74c2017c"
+      "sha256": "5aa666c00af1e29a0b531e21092abacef274de07d75dedecfb25d1a8c96013cc"
     },
     {
       "path": "agents/adt-forensic-investigator.md",
-      "sha256": "fea47d0061a87592a4988d26398e077071d21a1fb20b9a02c65162304f27ab39"
+      "sha256": "6125817dec47bd72dbf150552760e1c8b35a0bbef7ae2604217edf183bce72f2"
     },
     {
       "path": "agents/adt-plan-quality-reviewer.md",
-      "sha256": "27c86cddea431c83e66271c62172cfc4a61bce63694d62f8040287b7685158c8"
+      "sha256": "c57dbf6f3b88f2b52109e37ff4d31c65e6368620e47c614d2acd2df99d768259"
     },
     {
       "path": "agents/adt-security-reviewer.md",
-      "sha256": "27314a0068310926d9514b6e47387ce7eac248ab47ee76e494becef8351987ff"
+      "sha256": "7b4cbe651cb79ae54d9c450f46f6928dd69bb3a35bf06ed5ba9c34e53e047e3c"
     },
     {
       "path": "commands/adt-block.md",
-      "sha256": "2eefe6e580327cda7e9bf85321352da54ee93e0927eb4fc88337dedfa1740880"
+      "sha256": "5cbb3f3cbf9dc8490fb36f71efbfda2f6849e608075471fb98c850e3a8191c95"
     },
     {
       "path": "commands/adt-brief.md",
-      "sha256": "90b98fc886002d58b40a5083fcc0eb83f80fe7d682e7037238ffce3096f37a21"
+      "sha256": "c72ede5dbab71c582c2416e0b3e4037474147c95a94f7d9a89bd90a00d758864"
     },
     {
       "path": "commands/adt-build-todone.md",
-      "sha256": "60631c291135fda54900306cbdf617d34587102bb9e63349f4a49ce89cc60a84"
+      "sha256": "4edc35535efd498f1e17289d030cbb8690fd4f44da4e25d3914af5c46317ccaf"
     },
     {
       "path": "commands/adt-build.md",
-      "sha256": "84e882c1fc744132c2bb2b8bd19dc141a6e282bd79c9ecf32c009bccc7d56807"
+      "sha256": "6689c926c7648e3d7f42f9ed2ba056ee75a3ba6f183cea773b15433e0a7e315b"
     },
     {
       "path": "commands/adt-close.md",
-      "sha256": "1d260003e1496eec151c91cda83b8f1c521e8d0a8b98e61fb0dc43104b55781f"
+      "sha256": "fe24f44c93c9c6a129e0a7f02d1282df3796e92766ec10840954bd5613af0872"
     },
     {
       "path": "commands/adt-decide.md",
-      "sha256": "6550274cefba02187fec3d145a8ed77e16cb63cedb673fe8b91c25dc95ce31a8"
+      "sha256": "3ec4cf8f24e0e5837b28e6d257767b055a61c45a1765caeae93ef6fca696d59d"
     },
     {
       "path": "commands/adt-plan-fasttrack.md",
-      "sha256": "631d4334dc03c2aa5cc506d7f74f455e11563f1bafa8bade7d7fd5b689e841ad"
+      "sha256": "e9d6f0f6baee680f667262442646e82d97bd2b9b467589f1bda38bb0d853254c"
     },
     {
       "path": "commands/adt-plan.md",
-      "sha256": "5f6ec7196510b017edc665133b250b2534925349c2e40b76430fc673bc5d094f"
+      "sha256": "acbd2eec48c924af88dea7b8caddfefeba20d7f28e704a42c2613045ce05985c"
     },
     {
       "path": "commands/adt-qa-run.md",
-      "sha256": "d3d44db9c60cf507d46b9dba89445760b382fe9f55ab14710f6ce7961df0c42e"
+      "sha256": "c0fba4c945027c78e939a21099dcc9d0c529d75bcd8a6b9ea8d6585a912656cf"
     },
     {
       "path": "commands/adt-release-check.md",
-      "sha256": "a1c26146a3aeea8bffd36a99d36091edb510ca4d2073aa277b19d16893c68913"
+      "sha256": "3c9c74c30717cb685b3df896032b37c9b339df12cf5a2bca30d9104203e8b14c"
     },
     {
       "path": "commands/adt-review-critical-path.md",
-      "sha256": "52cb5d383403aeb5b62d7ca3d61a732472e996a2ca9abd9e5c3bcac63067fcbd"
+      "sha256": "701046362af3598cc820447146fae541b41452b5d5b75e5b2a400972bcbb5cfe"
     },
     {
       "path": "commands/adt-review-designer.md",
-      "sha256": "83232eb3c41a52fb237e47c6f576cd3390c8b2e42928623fddf44be06ee0efc9"
+      "sha256": "23f9c3cca9adeb012707b23a6b2fd01b4653f930479d01917b4596229a59b9c9"
     },
     {
       "path": "commands/adt-review-security.md",
-      "sha256": "5bc0fec251ade0b8a84456fc1eee514fcf72f1315e94e39bf6f0dbd2458673be"
+      "sha256": "c6dfe7f84095423ce1394c88f372b21b72bc9fb344108c80377b753d3b72b58f"
     },
     {
       "path": "commands/adt-unblock.md",
-      "sha256": "4aea9b58834ae68b709c2213df1a82caeaa596996b0992609ea407628923d807"
+      "sha256": "f0793b17ec6ee627425831bb8fe2dcf16f4f1972b393dbc13834bb4232f148cc"
     },
     {
       "path": "hooks/adt-close-complete.sh",
-      "sha256": "8daf3e3ef9a1e0e9e8aa194a1fc631bd1f8dff776cf14993f8b4ce845ae12395"
+      "sha256": "52769d24df771ca03074597d33faa9f1b39a19169b767b3f7fa75156b9976bd5"
     },
     {
       "path": "hooks/adt-deferral-guard.sh",
-      "sha256": "8d18234d5edd935e3fc564906edcfdccb1d8b0dad84bbcd32a01e9675c3e58e6"
+      "sha256": "ee18ed8e1e113f8b7542417d7be8a5cadee806ecff853f322a31c0e568ad8950"
     },
     {
       "path": "hooks/adt-deploy-guard.sh",
-      "sha256": "6a1c47172fa399c7a90f8b8331e2f59a72cec79383528ceb78d1092da4f93d39"
+      "sha256": "4edb5cb14c93b643014f2a7f3cd2e3daa1524dce517b0b3d35c92987f1dfdd3e"
     },
     {
       "path": "hooks/adt-destructive-git-guard.sh",
-      "sha256": "525e89fbb38572e97b5394f0467ded72f605edd52b7cb8a040ee2892c409838a"
+      "sha256": "e80c7e04bbab3466bb9aaa41e98801c49cf7f7c4037c41a03e1d816344ffc4ce"
     },
     {
       "path": "hooks/adt-dod.sh",
-      "sha256": "0384d1dc59fad249a2a9d8d9c3f62008708c12fada52444bdca981cf4487b1ac"
+      "sha256": "5d623aa522805e22a77dcd2dcaadaa89abae578fd387dca00608064ab872104d"
     },
     {
       "path": "hooks/adt-done-guard.sh",
-      "sha256": "1e9ef6664e38eb4273bb4444ea0ce498362f92f7e363c18b28068f83f59aa934"
+      "sha256": "6334924884e430172d767495aa79abaebd3c40ed8f2a45680d6992455d4e05ef"
     },
     {
       "path": "hooks/adt-mark-tix.sh",
-      "sha256": "5e17fa13506c8fb070c3e63460f9758513c2e503d8f0f21b1b78abad07f17100"
+      "sha256": "4470b1d58091e4679bd0af40293fb5e90dfaebcdafd1732d4fa7f5f79dc34553"
     },
     {
       "path": "hooks/adt-phrase-linter.sh",
-      "sha256": "fce98cca723a9adfd9fb1cb50b4c8d4827025b6bf1331fa2c9fb7d56a0d65a44"
+      "sha256": "425c43eb4d59d9a51d522cb86124cbf2f1837d4a9855733871726df86ab5162a"
     },
     {
       "path": "hooks/adt-reattribute.sh",
-      "sha256": "c1fae058c414cc56ffe1bbdbe4659ba46cc33fed8f3d02f40da3439644917d9a"
+      "sha256": "ab72fd4fe72dfb780be5a2c8b17828c20e1f04ff4f6fa9af2fcee1a3719b36d1"
     },
     {
       "path": "hooks/adt-subagent-cost.sh",
-      "sha256": "ad9fea5e81156c550f1d7fb26aadb85c373f73a48cfeefc5ad6a14275eb2f784"
+      "sha256": "db6ed87a1161430e2c3cdd0e96a6b8cc26d8ca487d6f59b5f888e05b27f87ec4"
     },
     {
       "path": "hooks/adt-terminal-title.sh",
-      "sha256": "f3e3b76cfb49689c8a3ca30f8fba33ca1926577647068c6f95945b641c492cb1"
+      "sha256": "81a33e18cfee972de1fbdd0f38caf5b6dc6a295194d49e50d0c57485922b771c"
     },
     {
       "path": "hooks/adt-test-run-guard.sh",
-      "sha256": "bb6530ebebb4d000c0e12fa85e9fdd97ba359803cb804503690507e8b2c5dd1f"
+      "sha256": "b41d9419fb05607359a567652895b011d841f97ac1969060bae8ec43bbf55e1a"
     },
     {
       "path": "hooks/adt-token-log.sh",
-      "sha256": "a5dc54691932be0476147994ee7441848db0006c2882d029b2143d1d665d793a"
+      "sha256": "62c405bb9206a0ca36737dbeb9a4a357a4eda7aca660cc3ef365f85b4787308c"
     },
     {
       "path": "hooks/adt-token-sum.sh",
-      "sha256": "edaa2cc05824232131f00830be73a27696b8bcd6e0df530a4934c3f5642c77b1"
+      "sha256": "946a95634c6efcdfbef568c3c4960ce351adf6b4db76c2eee32986e8607af25e"
     },
     {
       "path": "hooks/adt-token-total.sh",
-      "sha256": "e733b6cf8f8087772ce972a013ce650ef94207411b614ed89fe22202a55ccea9"
+      "sha256": "cc4ec193dc2b722f3d3c9db345a2d1d24bafba44cbb744c573bda48fb6054002"
     },
     {
       "path": "hooks/adt-usage-log.sh",
-      "sha256": "cea819a88739ac53249fdb66b868630f7a287b5b040b98d8f1f16c0738ef69de"
+      "sha256": "022a86f9417a8e73f58a7edee2db60731d362f80c6c793eb12eae609f27f3ac2"
     },
     {
       "path": "hooks/adt-verify-bind.sh",
-      "sha256": "f6703f0e12686378f516b2c624896a826f07290a2b69aa814f574eda5b3d932b"
+      "sha256": "69c2f3bc6b338cb11e5694969c11208adf92eec8d8d9fa03e904ab5822648fd1"
     },
     {
       "path": "hooks/adt-worktree-guard.sh",
-      "sha256": "bebc3f6ae84b25d221986ea5bbca38d8729c8d4644412f24f3b8bb637c5611ad"
+      "sha256": "8808a02385d182f4bb97bff479c90f3c504f9ccff7c9d1cd2c6d5c5ee8b9387d"
     },
     {
       "path": "rules/multi-agent-git-workflow.md",
-      "sha256": "0b3a38f42d1f396feb888e9eed6da1e58417dde064fc03e2a356cca77edd49d2"
+      "sha256": "aebf7093417379e2d45da1be2418f91979879c4443dfc3313b00fc5bed64d0c6"
     },
     {
       "path": "rules/working-style.md",
-      "sha256": "73ebeefd0f74bdf17004159461948a299b1fc34c377c6b30e8a5ff07dca07680"
+      "sha256": "a58f71ee637817b59ad6f44ad0dcee5615bbc2101b359b968f4bbe424051ccac"
     },
     {
       "path": "skills/adt-diagnose/SKILL.md",
-      "sha256": "470fff5c43fa6f3e3e460cc94ce423806a648073781375039b75f06ebc677a52"
+      "sha256": "c81b16ebddb5c871420079849b2e92cc769b45e162898dbf06a61d31a202618f"
     },
     {
       "path": "tools/adt_backfill_cost.py",
-      "sha256": "35d66e40e8ccde8935d003d65a395679385fe5702dee60e3cec819da678b75ca"
+      "sha256": "9c489af248253302d221d80a086105f259f35177cb2df79a461689d16369b9f0"
     },
     {
       "path": "tools/adt_cost.py",
-      "sha256": "dd92ad3319d1b995b0f898df977860abd7a2e09590060063bccb811b788d4695"
+      "sha256": "77a79995bce4e37882caba06a46366987ae6a1ed7095231c46da7f87dc608164"
+    },
+    {
+      "path": "tools/adt_devs.py",
+      "sha256": "fc4f85b944a2087d099162586dfedd40bc70e6d07e4f8f80cfc4865c5a26c4e2"
     },
     {
       "path": "tools/adt_dod.py",
-      "sha256": "fc980bf5c3273b88194698a1982ea1f12d1294645b0673a15c9afd8c8dae8dc5"
+      "sha256": "8dbad815528c55e83ac0bd0f135f765ae4579b28270054c2108f4a4e081c1471"
+    },
+    {
+      "path": "tools/management_report.py",
+      "sha256": "2eb61180448d86c3a0e152037f916496892d060df1f84d3be02e4a775cd7c362"
+    },
+    {
+      "path": "tools/management_report_template.html",
+      "sha256": "bcc5eec58308fc67efdfdb651b1235dc11cb938be5fc5a3fd76a564facf39c01"
     },
     {
       "path": "tools/plan-quality-calibration.md",
-      "sha256": "f24003081688eb6b8f906748514196e00679e9ab375bd7ecb4b783807ee7b641"
+      "sha256": "ac3638c96a641b3fbd1e9eec745dfe8bc5c512d222f98e1db6842b2422749005"
     },
     {
       "path": "tools/pricing.json",
@@ -190,7 +202,7 @@
     },
     {
       "path": "tools/ticket_serializer.py",
-      "sha256": "0937bee31f61611cbd75cf28d4387a0ad0d9fd47be00ba2cedbe1e8b8f9cc0c6"
+      "sha256": "67d70e41f6364f9a2dd9c5611f5344da62efe9b4f548a237ad991bdc9c5392cf"
     }
   ]
 }

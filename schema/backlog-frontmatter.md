@@ -29,10 +29,22 @@ mirrors it into a `stage:` field.
 | `tokens` | no | integer \| `unattributed` | cost-of-work stamped at `/adt-close` from `adt-token-total.sh` — the cross-machine sum (the cost-of-work work). `unattributed` = never captured; never coerce to `0` |
 | `cost_usd` | no | number \| `unattributed` | the same work in money, stamped at `/adt-close` from `adt-token-total.sh --cost` (ADT-115). Anthropic list rates, priced per ledger row at that row's own model **and** speed. **Not necessarily complete:** the ledger recorded only the main session until 2026-09-06, so for work closed before then this excludes subagent spend entirely — read `cost_tier` before quoting the number (ADT-247). `unattributed` = never captured; never coerce to `0` |
 | `cost_tier` | no | `measured` \| `estimated` \| `legacy` \| `unattributed` | how `cost_usd` was arrived at (ADT-115). Anything other than `measured` renders with a `~` prefix on the board. Never inferred from the value — it travels with it |
+| `epic` | yes, to plan | free text | AO-028: the larger piece of work the ticket belongs to. Asked at `/adt-brief`, offering the names `tools/management_report.py --list-groups <cache>` prints. The done-guard denies a move into `planned/` without it. |
+| `feature` | yes, to plan | free text | AO-028: the feature inside the epic. A feature is the pair (`epic`, `feature`), so one name under two epics is two features. Required to plan, like `epic`. |
+| `product_owner` | no | GitHub handle or a name | AO-028: who owns the work. An epic's owner is the most common value among its tickets (a tie goes to the earliest-created ticket); a feature shows its epic's owner unless its own tickets name a different one. |
+| `devs` | no | comma-separated GitHub handles | AO-028: who wrote the linked commits, stamped at `/adt-close` by `tools/adt_devs.py`. An empty `devs:` means checked, with no commit resolving to a GitHub login. Never guessed from a git author name. |
+| `planned_start` | no | `YYYY-MM-DD` | AO-028: asked at `/adt-plan`; absent when no plan was given. Shown as Plan start. |
+| `planned_finish` | no | `YYYY-MM-DD` | AO-028: as `planned_start`. Shown as Plan finish; the finish slip is measured against it. |
+| `planned_cost` | no | USD number | AO-028: as `planned_start`. Shown as Plan cost; the cost variance is the actual cost minus this. |
 | `sync_conflict` | no | 16-hex hash prefix | **machine-local, never travels.** Set by the sync when this machine's push was refused because the Issue changed after this machine last synced (AO-027). GitHub's version sits beside the file as `<file>.md.github`. Merge it in and delete this line to push the merge, or delete the file to take GitHub's version. |
 | `recurring_cost` | when the diff touches infrastructure | string | what this ticket costs **per month from now on**, and how that was measured — e.g. `~2500 Actions min/month (measured 2026-09-07)`. `none` is a valid answer. Required by done-guard gate #4 when the ticket's commits touch a CI workflow, Dockerfile, terraform, unit file or deploy config (ADT-280) |
 
 ## `recurring_cost` — the bill that outlives the ticket (ADT-280)
+
+The management report (`.adt/management-report.html`, AO-028) shows three of the
+existing fields under plan-and-actual names, with no change to how they are
+stored: `created` is **Actual start**, `closed` is **Actual finish**, and
+`cost_usd` (with `cost_tier`) is **Actual cost**.
 
 `cost_usd` counts model tokens: what it cost to *do* the work, once. A ticket
 that switches on infrastructure also starts a meter that runs every month
