@@ -433,14 +433,15 @@ def _with_slug_trailer(body: str, slug) -> str:
 #
 # The carried set is a COMPLEMENT, not a list, so a field added later (AO-028's
 # Epic and Feature) travels with no change here. Excluded: what to_issue maps
-# elsewhere, the fields the pull owns (adt_sync._PULL_OWNED, repeated here
-# because this module imports nothing from the sync), and `sync_conflict`,
-# which describes one machine's state and must never travel.
+# elsewhere, the fields the pull owns (PULL_OWNED_KEYS, defined here so the
+# sync imports it and the two lists cannot drift), and `sync_conflict`, which
+# describes one machine's state and must never travel.
+PULL_OWNED_KEYS = ("issue_number", "issue_node_id", "assignees", "updated",
+                   "closed")
 _META_EXCLUDED = frozenset({
     "title", "body", "slug", "state", "state_reason", "milestone", "created",
     "created_by", "comments", "done_evidence", "tags",
-    *LABEL_SCALAR_KEYS, *GATE_KEYS,
-    "issue_number", "issue_node_id", "assignees", "updated", "closed",
+    *LABEL_SCALAR_KEYS, *GATE_KEYS, *PULL_OWNED_KEYS,
     "sync_conflict",
 })
 _META_TRAILER = "<!-- adt:meta %s -->"
@@ -466,6 +467,15 @@ def _strip_meta_trailer(body: str) -> str:
     """Remove exactly the bytes _with_meta_trailer added. Run it AFTER
     _strip_slug_trailer: the meta line sits before the slug trailer."""
     return _META_TRAILER_RE.sub("", body or "")
+
+
+def apply_meta(out: dict, meta: dict) -> None:
+    """Make `out`'s carried fields exactly the ones in `meta`: a carried field
+    `meta` lacks was removed on the machine that published it."""
+    for k in list(ticket_meta(out)):
+        if k not in meta:
+            del out[k]
+    out.update({k: v for k, v in meta.items() if _meta_carries(k, v)})
 
 
 def meta_from_body(body: str):
@@ -724,10 +734,7 @@ def from_issue(issue: dict, base: dict | None = None) -> dict:
     out["body"] = _strip_meta_trailer(_no_slug)
     _meta = meta_from_body(_no_slug)
     if _meta is not None:
-        for k in [k for k in out if k not in _META_EXCLUDED]:
-            if k not in _meta:
-                del out[k]          # removed on the machine that published it
-        out.update({k: v for k, v in _meta.items() if _meta_carries(k, v)})
+        apply_meta(out, _meta)
     if not out.get("slug"):
         _carried = _slug_from_trailer(_raw_body)
         if _carried:

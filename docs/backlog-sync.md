@@ -161,7 +161,9 @@ without a warning.
 - **Resolving a conflict.** To keep a merged copy, merge `<file>.md.github` into
   the file and delete its `sync_conflict:` line; the next push sends it, removes
   the copy and marks the comment resolved. To keep GitHub's version, delete the
-  file; the next pass rebuilds it with a full sweep. If the Issue changed again
+  file; the next pass rebuilds it with a full sweep. If the pull will not rebuild
+  that Issue (it is archived, claimed or gone), the conflict is closed after that
+  one sweep. If the Issue changed again
   before the resolution was pushed, that is a new conflict, and the copy is
   refreshed.
 
@@ -179,7 +181,9 @@ A machine whose text differs is the stale one: it takes the Issue's text, keeps
 its own metadata, and is recorded in the sidecar's `stale_meta` so it never
 publishes that metadata. Two machines that both hold the Issue's text but
 different metadata will both publish, and the second gets a conflict on that
-ticket, which is flagged and resolved like any other. Baselines fill in as
+ticket, which is flagged and resolved like any other. At most 100 tickets
+republish per pass, so a large backlog migrates over several hourly sweeps
+instead of in one burst of API calls. Baselines fill in as
 tickets sync; until a ticket has
 one, its push behaves as it did before AO-027.
 

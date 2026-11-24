@@ -549,3 +549,46 @@ def test_conflict_comment_is_posted_after_a_rate_limited_first_try(
     monkeypatch.setattr(adt_sync, "_upsert_comment", real)
     b.tick(gh)
     assert len(gh.conflict_comments(42)) == 1
+
+
+def test_a_conflict_on_an_issue_the_pull_cannot_rebuild_is_closed(
+        tmp_path, monkeypatch):
+    """A deleted conflicted file forces one full sweep. When the Issue is one
+    the pull will not rebuild (here: archived), the conflict is closed instead
+    of forcing a full sweep on every later tick."""
+    gh, a, b = _two_machines(tmp_path, monkeypatch)
+    a.edit(_set_plan("A's plan"))
+    b.edit(_set_log("B's build notes"))
+    a.tick(gh)
+    b.tick(gh)
+    gh.issues[42]["labels"].append({"name": "adt:archive"})
+    b.path().unlink()
+
+    b.tick(gh)
+
+    assert not b.path().exists()
+    cfg = adt_sync.load_config(str(b.root))
+    assert "42" not in (adt_sync._load_state_doc(cfg).get("conflicts") or {})
+
+
+def test_migration_republishes_are_capped_per_pass(tmp_path, monkeypatch):
+    """With the cap at zero, an in-sync machine waits instead of republishing
+    an Issue that has no meta trailer yet."""
+    gh = _wire(monkeypatch)
+    monkeypatch.setattr(adt_sync, "_REPUBLISH_PER_PASS", 0)
+    current = _ticket()
+    legacy = (ticket_serializer._strip_meta_trailer(
+        ticket_serializer._strip_slug_trailer(to_issue(current)["body"]))
+        + "\n\n<!-- adt: slug=shared -->\n")
+    gh.seed(42, current, body=legacy)
+    a = Machine(tmp_path, "a")
+    a.write(current)
+    a.converge()
+
+    edits = []
+    for _ in range(2):
+        _, calls = a.tick(gh)
+        edits += [c for c in calls if c[:2] == ["issue", "edit"]]
+    assert edits == []
+    assert ticket_serializer.meta_from_body(
+        ticket_serializer._strip_slug_trailer(gh.issues[42]["body"])) is None

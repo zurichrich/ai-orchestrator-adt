@@ -38,8 +38,8 @@ from ticket_serializer import (FILING_LABEL, NON_TICKET_LABELS,  # noqa: E402
                                parse_md, emit_md,
                                to_issue, from_issue,
                                _derive_state, _strip_slug_trailer,
-                               _strip_meta_trailer, meta_from_body,
-                               ticket_meta)
+                               meta_from_body, ticket_meta, apply_meta,
+                               PULL_OWNED_KEYS)
 
 
 # --------------------------------------------------------------------------
@@ -404,8 +404,10 @@ def pass_lock(cfg: dict):
 # The sidecar's top-level schema — the ONE place the known keys are declared.
 # A key here is recognised as "new format" by _load_state_doc; add new state
 # (like the ADT-101 `pull` block) to this tuple, not to ad-hoc `in` checks.
+# AO-027's per-Issue state: baselines, open conflicts, stale machines.
+_SYNC_KEYS = ("remote_sigs", "conflicts", "stale_meta")
 _STATE_KEYS = ("file_hashes", "board_index", "pull", "project_ctx", "watch",
-               "remote_sigs", "conflicts", "stale_meta")
+               *_SYNC_KEYS)
 
 
 def _load_state_doc(cfg: dict) -> dict:
@@ -455,7 +457,8 @@ def _load_sync_state(cfg: dict) -> dict:
     return _load_state_doc(cfg).get("file_hashes", {})
 
 
-def _persist_state(cfg: dict, file_hashes: dict) -> None:
+def _persist_state(cfg: dict, file_hashes: dict, sync: dict | None = None
+                   ) -> None:
     """Write the sidecar: the file-change map + a snapshot of the in-process
     board index (issue_number -> {item_id, status}) so the next process skips
     the Projects board re-walk. Board-index keys are ints; JSON stringifies
@@ -466,7 +469,7 @@ def _persist_state(cfg: dict, file_hashes: dict) -> None:
     clobbering it with {} — otherwise an idle tick would discard the cache and
     force the next change to re-walk the board. Writes via _update_state_doc,
     so keys this writer doesn't own (the ADT-101 pull state) survive."""
-    updates = {"file_hashes": file_hashes}
+    updates = {"file_hashes": file_hashes, **(sync or {})}
     key = f"{cfg.get('owner')}/{cfg.get('project_number')}"
     board = _BOARD_INDEX.get(key)
     if board:
@@ -878,8 +881,7 @@ def _enter_conflict(path, data, current, cfg, sync, cur_sig) -> dict:
     copy = path + _CONFLICT_COPY_SUFFIX
     theirs = from_issue(current, base=dict(data))
     theirs.pop("sync_conflict", None)
-    with open(copy, "w") as f:
-        f.write(emit_md(theirs))
+    _write_back(copy, theirs)
     data["sync_conflict"] = cur_sig[:16]
     _write_back(path, data)
     rec = dict(sync["conflicts"].get(key) or {})
@@ -1583,8 +1585,7 @@ def checkpoint_tokens(project_root: str, cfg: dict,
 # ticket at once (a slug trailer on every Issue body), floating June's done
 # tickets to the top of the lane. `closed` is set by the close and by nothing
 # else, so pulling it gives the lane a date no later edit can move.
-_PULL_OWNED = ("issue_number", "issue_node_id", "assignees", "updated",
-               "closed")
+_PULL_OWNED = PULL_OWNED_KEYS   # defined in the serializer (AO-027)
 
 # Status-label -> cache subfolder. type is read from a `type:` field/label or
 # defaults to tasks; status from the stage: label.
@@ -1777,8 +1778,7 @@ def _pull_content(path, data, issue, clean: bool, sync: dict):
     key = str(issue.get("number"))
     cur = _remote_sig(issue.get("title"), issue.get("body"))
     want = to_issue(data)
-    if ((issue.get("title") or "") == (want.get("title") or "")
-            and not _body_differs(issue.get("body"), want.get("body"))):
+    if cur == _remote_sig(want.get("title"), want.get("body")):
         sync["remote_sigs"][key] = cur
         return None
     remote_meta = meta_from_body(_strip_slug_trailer(issue.get("body") or ""))
@@ -1787,10 +1787,7 @@ def _pull_content(path, data, issue, clean: bool, sync: dict):
     candidate["title"] = theirs.get("title")
     candidate["body"] = theirs.get("body")
     if remote_meta is not None:
-        for k in list(ticket_meta(candidate)):
-            if k not in theirs:
-                del candidate[k]
-        candidate.update(ticket_meta(theirs))
+        apply_meta(candidate, remote_meta)
     if theirs.get("done_evidence") is not None:
         candidate["done_evidence"] = theirs["done_evidence"]
     if remote_meta is not None:
@@ -1802,11 +1799,12 @@ def _pull_content(path, data, issue, clean: bool, sync: dict):
     # the generated DoD block while the file's need not. A raw comparison
     # would take the same content every tick, or judge an in-sync machine
     # stale.
-    def _as_pushed(d):
-        i = to_issue(parse_md(emit_md(d)))
+    def _as_pushed(disk):
+        i = to_issue(disk)
         return _remote_sig(i.get("title"), i.get("body"))
 
-    if _as_pushed(candidate) == _as_pushed(data):
+    on_disk = parse_md(emit_md(candidate))
+    if _as_pushed(on_disk) == _as_pushed(parse_md(emit_md(data))):
         sync["remote_sigs"][key] = cur
         # A machine that had to take the text is the stale one, and its
         # metadata is no fresher than its text was, so it never publishes it.
@@ -1825,9 +1823,10 @@ def _pull_content(path, data, issue, clean: bool, sync: dict):
     sync["remote_sigs"][key] = cur
     return {"action": "pulled-content", "number": issue.get("number"),
             "slug": data.get("slug"), "path": path,
-            "hash": _push_hash(parse_md(emit_md(data)))}
+            "hash": _push_hash(on_disk)}
 
 
+_REPUBLISH_PER_PASS = 100  # AO-027 migration: metadata republishes per pass
 _FULL_SWEEP_INTERVAL = 3600.0  # s between watermark-bypassing full pulls
 _REST_PAGE_SIZE = 100
 
@@ -2073,9 +2072,7 @@ def pull_all(cfg: dict, pushed_hashes: dict | None = None,
                         if sync is not None else None)
                 if took:
                     results.append(took)
-                elif moved:
-                    pass
-                elif changed:
+                elif changed and not moved:   # the relocation already wrote
                     _write_back(path, data)
                     results.append({"action": "pulled", "number": num,
                                     "slug": data.get("slug")})
@@ -2217,15 +2214,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     sync = None
     if not dry_run:
         doc = _load_state_doc(cfg)
-        sync = {"remote_sigs": dict(doc.get("remote_sigs") or {}),
-                "conflicts": dict(doc.get("conflicts") or {}),
-                "stale_meta": dict(doc.get("stale_meta") or {})}
-
-    def _save_sync():
-        if sync is not None:
-            _update_state_doc(cfg, {"remote_sigs": sync["remote_sigs"],
-                                    "conflicts": sync["conflicts"],
-                                    "stale_meta": sync["stale_meta"]})
+        sync = {k: dict(doc.get(k) or {}) for k in _SYNC_KEYS}
 
     # Two cache files for one Issue (ADT-354): whichever is pushed last wins,
     # and a stale stub that says `state: open` reopens a closed Issue and moves
@@ -2266,8 +2255,7 @@ def reconcile_all(project_root: str, dry_run: bool = False,
             # the limit resets. This is the backoff that ends the runaway.
             results.append({"path": path, "action": "rate-limited",
                             "error": str(e)})
-            _persist_state(cfg, new_state)
-            _save_sync()
+            _persist_state(cfg, new_state, sync)
             return results
         except GhError as e:
             results.append({"path": path, "action": "error", "error": str(e)})
@@ -2301,9 +2289,16 @@ def reconcile_all(project_root: str, dry_run: bool = False,
         if any(not os.path.exists(c.get("path") or "")
                for c in sync["conflicts"].values()):
             full = True
+        republished = 0
         try:
             pulled = pull_all(cfg, pushed_hashes=state, full=full, sync=sync)
             results.extend(pulled)
+            # A conflicted file still missing after that full sweep belongs to
+            # an Issue the pull will not rebuild (archived, claimed, gone).
+            # Close the conflict, or every later tick would sweep again.
+            for k, c in list(sync["conflicts"].items()):
+                if not os.path.exists(c.get("path") or ""):
+                    _leave_conflict(k, cfg, sync)
             # AO-007: a relocated ticket is ALREADY converged — its new content
             # is what GitHub says — so record its hash under the new path and
             # drop the old key. This has to happen HERE rather than inside
@@ -2320,16 +2315,20 @@ def reconcile_all(project_root: str, dry_run: bool = False,
                     # Same reason as the relocation: recording the hash is what
                     # stops the content just pulled from going straight back up.
                     new_state[r["path"]] = r["hash"]
-                elif r.get("action") == "republish":
-                    new_state.pop(r["path"], None)   # next push sends the meta
+                elif (r.get("action") == "republish"
+                      and republished < _REPUBLISH_PER_PASS):
+                    # The next push sends the meta. Capped so the first sweep
+                    # after an upgrade cannot spend ~2 calls per ticket at once;
+                    # the rest come back on later sweeps.
+                    new_state.pop(r["path"], None)
+                    republished += 1
         except RateLimitError as e:
             results.append({"action": "rate-limited", "error": f"pull: {e}"})
         except GhError as e:
             results.append({"action": "error", "error": f"pull: {e}"})
 
     if not dry_run:
-        _persist_state(cfg, new_state)
-        _save_sync()
+        _persist_state(cfg, new_state, sync)
     return results
 
 
