@@ -250,8 +250,9 @@ Three properties are load-bearing:
 - **`under_recorded` records, it does not refuse.** A dispatch that legitimately
   produces no block (an interrupted reviewer, an `UNKNOWN`) would otherwise make
   the ticket permanently un-releasable three lanes later, with no reconciliation
-  path. Under-crediting is the conservative direction, and a rebuilt cache
-  produces exactly this state because frontmatter is never pushed to the Issue.
+  path. Under-crediting is the conservative direction. A cache file rebuilt from
+  an Issue that predates AO-027 produces exactly this state, because those
+  Issues carry no meta trailer and so no `gate_effects` rows.
 
 ### 4. Caveats must attach
 

@@ -61,7 +61,12 @@ def _rest_issue(number=7, stage="done", state="closed", updated="2026-09-20T10:0
         "number": number,
         "node_id": f"I_node{number}",
         "title": "Sample",
-        "body": "# Sample\n\nBody text.\n",
+        # The body as a post-AO-027 push leaves it: text, meta trailer, slug
+        # trailer. An Issue with no meta trailer is a migration case, which
+        # test_sync_multi_dev.py covers; here it would re-arm a push the fake
+        # cannot accept, and this file is about lanes.
+        "body": ('# Sample\n\nBody text.\n\n<!-- adt:meta {"id":"AO-7"} -->'
+                 '\n\n<!-- adt: slug=t -->\n'),
         "state": state,
         "state_reason": "completed" if state == "closed" else None,
         "labels": [{"name": "P1"}, {"name": f"stage:{stage}"},

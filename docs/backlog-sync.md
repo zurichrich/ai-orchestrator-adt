@@ -102,10 +102,10 @@ race, mitigated by atomic writes — sessions normally claim *different* tickets
 
 ## Conflict policy
 
-Push and pull own **disjoint field sets**, so there's no two-writer conflict:
-push is authoritative for content/stage (title, body, labels, open/closed);
-pull is authoritative for GitHub-owned fields (`issue_number`, `issue_node_id`,
-`assignees`, GitHub-side comments). Push runs first each pass.
+Push runs first each pass, then the pull. The pull is authoritative for the
+fields GitHub owns (`issue_number`, `issue_node_id`, `assignees`, `updated`,
+`closed`, GitHub-side comments). Everything else on a ticket can now change on
+either side, so the sync detects when both did.
 
 **The lane is the one exception, and it travels both ways (AO-007).**
 For a ticket whose cache file holds no unpushed local change,
@@ -127,14 +127,65 @@ own `stage:` (otherwise a local `mv` is in flight that no render has caught up
 with); the file must match its last pushed hash; and nothing may already sit at
 the destination, since `os.rename` overwrites silently.
 
-Two limits worth stating. **It converges the lane and nothing else** — title and
-body stay push-only, written from the Issue on the reconstruct branch alone, so
-a second machine shows the ticket in the right lane with whatever body it last
-held locally. And `state:` is **derived from the destination lane**, never
-copied from the Issue: the renderer derives it from the folder, so copying
-GitHub's value would disagree with the render whenever an Issue is closed under
-a non-done lane label, and the disagreement would re-arm the push and reopen the
-Issue on every tick.
+`state:` is **derived from the destination lane**, never copied from the
+Issue: the renderer derives it from the folder, so copying GitHub's value would
+disagree with the render whenever an Issue is closed under a non-done lane
+label, and the disagreement would re-arm the push and reopen the Issue on every
+tick.
+
+**The body travels both ways (AO-027).**
+Before AO-027 the pull carried only the lane down. A second machine kept
+whatever body it last held, and its next push replaced the first machine's work
+without a warning.
+
+- **Every frontmatter field reaches the Issue.** Each field with no native
+  Issue home (`size`, `plan_approved`, `gate_effects`, `commits`, the close
+  stamps, and any field added later) is written as one hidden line at the end of
+  the body, `<!-- adt:meta {json} -->`, before the slug trailer. `from_issue`
+  reads it back, so a cache file rebuilt from its Issue loses nothing. A gate
+  field rides the trailer when it is not `true`, because only `true` becomes a
+  `gate:` label.
+- **The pull takes title, body and metadata down** when the cache file has no
+  unpushed local change (the same hash test as the lane), and the file is not
+  in conflict. It compares what the Issue would hold after a round trip through
+  the file, so a final newline the file format cannot keep, or the generated DoD
+  block, never reads as a change.
+- **The push refuses to overwrite a change it has not seen.** The sidecar keeps
+  `remote_sigs`: per Issue, a hash of the title and body as this machine last
+  pushed, pulled, or found equal to its own file. When the Issue's hash differs
+  from that baseline and this machine also has a change, nothing for that ticket
+  is sent, labels and state included. The file gains `sync_conflict:`, GitHub's
+  version is written beside it as `<file>.md.github` (neither the sync nor the
+  board reads that suffix), and one `<!-- adt:conflict -->` comment on the Issue
+  tells the other developer.
+- **Resolving a conflict.** To keep a merged copy, merge `<file>.md.github` into
+  the file and delete its `sync_conflict:` line; the next push sends it, removes
+  the copy and marks the comment resolved. To keep GitHub's version, delete the
+  file; the next pass rebuilds it with a full sweep. If the pull will not rebuild
+  that Issue (it is archived, claimed or gone), the conflict is closed after that
+  one sweep. If the Issue changed again
+  before the resolution was pushed, that is a new conflict, and the copy is
+  refreshed.
+
+Conflicts are more frequent once metadata travels in the body. A ticket is one
+change unit, so any unpushed write on one machine collides with a push from the
+other, and that includes writes the tools make (`gate_effects` from a
+counter-check, `cost_usd` from `restamp_closed`), not only a person's edit. Each
+conflict costs a hand merge, and `<file>.md.github` holds GitHub's whole ticket
+rather than a field-by-field diff. That cost was accepted in exchange for one
+fetch per tick: the metadata comes with the bodies the pull already lists.
+
+**Migration.** An Issue pushed before AO-027 has no meta trailer. A machine
+whose title and body already match it publishes its metadata on the next push.
+A machine whose text differs is the stale one: it takes the Issue's text, keeps
+its own metadata, and is recorded in the sidecar's `stale_meta` so it never
+publishes that metadata. Two machines that both hold the Issue's text but
+different metadata will both publish, and the second gets a conflict on that
+ticket, which is flagged and resolved like any other. At most 100 tickets
+republish per pass, so a large backlog migrates over several hourly sweeps
+instead of in one burst of API calls. Baselines fill in as
+tickets sync; until a ticket has
+one, its push behaves as it did before AO-027.
 
 **The relocation does not run the done gate, by design.**
 `defaults/hooks/adt-done-guard.sh` intercepts an agent's Bash `mv`; the sync's

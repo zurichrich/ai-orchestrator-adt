@@ -36,12 +36,12 @@ def _run(monkeypatch, files):
     monkeypatch.setattr(adt_sync, "load_config", lambda root: {"repo": "o/r"})
     monkeypatch.setattr(adt_sync, "iter_cache_files", lambda cfg: list(files))
     monkeypatch.setattr(adt_sync, "_load_sync_state", lambda cfg: {})  # a new machine
-    monkeypatch.setattr(adt_sync, "_persist_state", lambda cfg, s: None)
+    monkeypatch.setattr(adt_sync, "_persist_state", lambda cfg, s, sync=None: None)
     monkeypatch.setattr(adt_sync, "checkpoint_tokens", lambda *a, **k: [])
     monkeypatch.setattr(adt_sync, "restamp_closed", lambda *a, **k: [])
     monkeypatch.setattr(adt_sync, "checkpoint_stamp", lambda *a, **k: [])
 
-    def reconcile_one(path, data, cfg, dry_run=False):
+    def reconcile_one(path, data, cfg, dry_run=False, sync=None):
         pushed.append(path)
         return {"path": path, "action": "updated"}
 

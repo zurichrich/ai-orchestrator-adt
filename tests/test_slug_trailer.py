@@ -50,10 +50,13 @@ class SlugTrailerPush(unittest.TestCase):
         self.assertNotIn("adt: slug=", to_issue(dict(TICKET, slug=None))["body"])
 
     def test_a_body_we_add_no_trailer_to_is_returned_byte_identical(self):
+        # No `id`: since AO-027 any field with no native Issue home (`id` is
+        # one) adds a meta trailer, and this test is about adding neither.
+        bare = {k: v for k, v in TICKET.items() if k != "id"}
         for slug in (None, "", "a -->b", "../escape", "x" * 300):
             for body in ("# T\n\nruns.", "", "# T\n\n## Section\n\n- a\n- b"):
                 with self.subTest(slug=slug, body=body):
-                    issue = to_issue(dict(TICKET, slug=slug, body=body))
+                    issue = to_issue(dict(bare, slug=slug, body=body))
                     self.assertEqual(issue["body"], body)
                     self.assertEqual(from_issue(issue, base={})["body"], body)
 

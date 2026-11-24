@@ -121,7 +121,9 @@ class TestIssueRoundTrip(unittest.TestCase):
         self.assertNotIn("gate:security", names)  # security_review_required: false
         back = from_issue(issue, base={})
         self.assertIs(back.get("ui_review_required"), True)
-        self.assertNotIn("security_review_required", back)
+        # AO-027: a gate that is not True has no label, so it rides the meta
+        # trailer; before that, a rebuild lost `false` entirely.
+        self.assertIs(back.get("security_review_required"), False)
 
     def test_priority_and_track_labels(self):
         issue = to_issue(parse_md(SAMPLE_MD))
