@@ -122,4 +122,4 @@ def main(argv=None) -> int:
 if __name__ == "__main__":
     sys.exit(main())
 
-# adt-bundle: v0.3.0
+# adt-bundle: v0.4.0

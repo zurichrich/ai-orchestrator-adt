@@ -51,4 +51,4 @@ Resolves a ticket that `/adt-block` parked while it waited for the user.
 8. **If the answer is a real judgement call, run `/adt-decide`** so it can be
    found in six months, not only in this ticket.
 
-<!-- adt-bundle: v0.3.0 -->
+<!-- adt-bundle: v0.4.0 -->

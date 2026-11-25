@@ -453,4 +453,4 @@ find "$sweep_dir" -maxdepth 1 -name '*.jsonl' -mmin "+$ADT_SESSION_WINDOW_MIN" \
 done
 exit 0
 
-# adt-bundle: v0.3.0
+# adt-bundle: v0.4.0

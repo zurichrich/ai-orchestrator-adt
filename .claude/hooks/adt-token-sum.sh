@@ -107,4 +107,4 @@ for ledger in sys.argv[2:]:
 print(total if matched else "unattributed")
 PY
 
-# adt-bundle: v0.3.0
+# adt-bundle: v0.4.0
