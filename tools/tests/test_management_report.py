@@ -54,9 +54,11 @@ def _row(id_, cost=None, tier="measured", start="2026-11-01", finish=None,
 def test_every_ticket_is_embedded(tmp_path):
     for s in ("a", "b", "c"):
         _ticket(tmp_path, s, epic="Billing", feature="Invoices")
-    _ticket(tmp_path, "d", stage="ideas")
-    ids = [t[0] for t in _data(_render(tmp_path))["tickets"]]
-    assert sorted(ids) == ["A", "B", "C", "D"]
+    _ticket(tmp_path, "d", stage="ideas", cost_usd="2.5", cost_tier="measured")
+    rows = {t[0]: t for t in _data(_render(tmp_path))["tickets"]}
+    assert sorted(rows) == ["A", "B", "C", "D"]
+    # A stamped cost_usd arrives in dollars: the board holds micro-dollars.
+    assert rows["D"][10] == 2.5 and rows["A"][10] is None
 
 
 def test_report_contains_only_its_own_project(tmp_path):
@@ -90,10 +92,14 @@ def _seed_one(cache: Path) -> Path:
 
 def test_slip_and_cost_variance():
     done = management_report.rollup(
-        [_row("a", finish="2026-11-10", pf="2026-11-07", cost=5.0, pc=3.0),
-         _row("b", finish="2026-11-05", pf="2026-11-06", cost=1.0)], TODAY)
+        [_row("a", finish="2026-11-10", ps="2026-11-04", pf="2026-11-07", cost=5.0, pc=3.0),
+         _row("b", finish="2026-11-05", ps="2026-11-02", pf="2026-11-06", cost=1.0, pc=1.5),
+         # Costed but unplanned: in the actual cost, out of the variance.
+         _row("c", finish="2026-11-08", cost=2.0)], TODAY)
+    assert done["ps"] == "2026-11-02" and done["pf"] == "2026-11-07"
+    assert done["nPlan"] == 2 and done["pc"] == 4.5
     assert done["slip"] == 3 and done["slipOpen"] is False
-    assert done["cvN"] == 1 and done["cv"] == 2.0
+    assert done["cvN"] == 2 and done["cv"] == 1.5
     open_ = management_report.rollup([_row("a", pf="2026-11-20")], TODAY)
     assert open_["slip"] == 4 and open_["slipOpen"] is True
     early = management_report.rollup([_row("a", pf="2026-12-20")], TODAY)
