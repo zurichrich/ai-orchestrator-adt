@@ -314,7 +314,8 @@ def _render(cache: str, cfg: dict, code_root: str = "",
                     # ADT-58 reason for copying a whole tree is gone.
                     # ADT-143: references.html is no longer generated — its
                     # content is inlined into kanban.html as a :target panel.
-                    for fname in ("kanban.html",):
+                    # AO-028: the management report sits beside the board.
+                    for fname in ("kanban.html", "management-report.html"):
                         src = os.path.join(cache, fname)
                         if os.path.isfile(src):
                             shutil.copyfile(src, os.path.join(dst_dir, fname))

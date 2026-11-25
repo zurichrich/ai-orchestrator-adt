@@ -63,3 +63,21 @@ def test_render_survives_missing_optional_artifacts(tmp_path, monkeypatch):
 
     assert (code_root / ".adt" / "kanban.html").is_file()
     assert not (code_root / ".adt" / "references.html").exists()
+
+
+def test_render_copies_the_management_report(tmp_path, monkeypatch):
+    """AO-028: the report build_kanban writes beside the board is copied too."""
+    cache = tmp_path / "cache"
+    cache.mkdir(exist_ok=True)
+    code_root = tmp_path / "repo"
+    (code_root / ".adt").mkdir(parents=True, exist_ok=True)
+    (cache / "kanban.html").write_text("<html></html>")
+    (cache / "management-report.html").write_text("<title>report</title>")
+
+    monkeypatch.setattr(adt_watch, "_HAVE_RENDERER", True)
+    monkeypatch.setattr(adt_watch.build_kanban, "run", lambda **kw: None)
+
+    adt_watch._render(str(cache), cfg={}, code_root=str(code_root))
+
+    copied = code_root / ".adt" / "management-report.html"
+    assert copied.read_text() == "<title>report</title>"

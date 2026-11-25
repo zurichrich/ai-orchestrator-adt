@@ -133,4 +133,4 @@ out: a missing line and a verdict that genuinely assumes nothing are different
 facts, and `--record-verdict` prints a NOTE when it sees a justification phrase
 with no declaration behind it.
 
-<!-- adt-bundle: v0.3.0 -->
+<!-- adt-bundle: v0.4.0 -->

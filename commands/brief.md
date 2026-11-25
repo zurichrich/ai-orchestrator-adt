@@ -35,6 +35,17 @@ not write a ticket with no number.
    pushes it as the only label that survives a cache rebuild. If it is missing,
    every rebuilt cache files the ticket as a task.
 
+   **Also ask for the epic, the feature and the product owner.** These group the
+   ticket on the management report (`.adt/management-report.html`). First run
+   `python3 .claude/tools/management_report.py --list-groups ~/.adt/<project>/cache`
+   and offer the names it prints, so one epic is not split in two by a different
+   spelling. A new name is fine when the work really is new. A feature belongs to
+   one epic: the same feature name under another epic is a different feature.
+   The product owner is a GitHub handle or a name. When the human gives none,
+   leave it out and the ticket shows its epic's owner.
+   Do not file the ticket until it has an epic and a feature.
+   The done-guard also denies moving a ticket into `planned/` without them.
+
 2. **Create the Issue first, and claim it on the same call.** The issue number is
    the ticket id. Read `repo` from `.adt/config.yaml`:
 
@@ -79,6 +90,9 @@ state: open
 state_reason: null
 priority: <P0|P1|P2>
 size: <XS|S|M|L>
+epic: <epic name>
+feature: <feature name>
+product_owner: <GitHub handle or name, or leave the line out>
 assignees: []
 milestone: null
 security_review_required: <true|false>

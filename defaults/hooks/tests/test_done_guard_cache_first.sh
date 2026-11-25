@@ -80,8 +80,8 @@ done
 # lines are printed once, after both copies have passed.
 mkdir -p "$TMP/home/.adt/cache/ideas" "$TMP/home/.adt/cache/planned"
 printf -- '---\nslug: notrack\n---\n' > "$TMP/home/.adt/cache/ideas/notrack.md"
-printf -- '---\nslug: fasttrack\ntrack: fast\n---\n' > "$TMP/home/.adt/cache/ideas/fasttrack.md"
-printf -- '---\nslug: quoted\ntrack: "standard"\n---\n' > "$TMP/home/.adt/cache/ideas/quoted.md"
+printf -- '---\nslug: fasttrack\ntrack: fast\nepic: E\nfeature: F\n---\n' > "$TMP/home/.adt/cache/ideas/fasttrack.md"
+printf -- '---\nslug: quoted\ntrack: "standard"\nepic: E\nfeature: F\n---\n' > "$TMP/home/.adt/cache/ideas/quoted.md"
 plan_move() {  # $1=hook $2=command -> prints the hook's output
   printf '{"tool_name":"Bash","tool_input":{"command":"%s"},"cwd":"%s"}' "$2" "$PROJ" \
     | HOME="$TMP/home" bash "$1" 2>/dev/null

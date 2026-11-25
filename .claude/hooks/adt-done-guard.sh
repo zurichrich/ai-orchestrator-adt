@@ -337,10 +337,12 @@ PY
     printf '%s' "$msg" | /usr/bin/python3 -c 'import sys,json; print(json.dumps({"systemMessage": sys.stdin.read()}))' 2>/dev/null || true
     ;;
   *mv*/planned/*)
-    # The plan gate. Silent unless the moved ticket has no valid track. The
-    # track is read by adt_dod.ticket_track(), the reader the plan-quality gate
-    # uses, so a quoted `track: "fast"` counts here too. Anything it cannot read
-    # is allowed, like the gates above.
+    # The plan gate. Silent unless the moved ticket has no valid track, or no
+    # epic or feature (AO-028: every ticket is grouped on the management report,
+    # and this is the gate every planning path passes). The track is read by
+    # adt_dod.ticket_track(), the reader the plan-quality gate uses, so a quoted
+    # `track: "fast"` counts here too. Anything it cannot read is allowed, like
+    # the gates above.
     CMD="$cmd" CWD="$cwd" ADT_TOOLS="$ADT_TOOLS" /usr/bin/python3 -c '
 import json, os, re, sys
 cmd = os.environ.get("CMD", "")
@@ -354,14 +356,18 @@ if not os.path.isfile(md):
     sys.exit(0)
 sys.path.insert(0, os.environ["ADT_TOOLS"])
 import adt_dod
-if adt_dod.ticket_track(md) in ("fast", "standard", "full"):
+def deny(why):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+        "permissionDecision": "deny", "permissionDecisionReason": why}}))
     sys.exit(0)
-print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-    "permissionDecision": "deny",
-    "permissionDecisionReason": "done-guard: plan gate - the ticket has no track. Set track: to fast, standard or full (/adt-plan step 4), then move it into planned/."}}))
+if adt_dod.ticket_track(md) not in ("fast", "standard", "full"):
+    deny("done-guard: plan gate - the ticket has no track. Set track: to fast, standard or full (/adt-plan step 4), then move it into planned/.")
+missing = [k for k in ("epic", "feature") if not adt_dod.ticket_field(md, k)]
+if missing:
+    deny("done-guard: plan gate - the ticket has no " + " or ".join(missing) + ". Set epic: and feature: (the existing names: python3 .claude/tools/management_report.py --list-groups <cache>), then move it into planned/.")
 ' 2>/dev/null || true
     ;;
 esac
 exit 0
 
-# adt-bundle: v0.3.0
+# adt-bundle: v0.4.0

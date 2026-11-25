@@ -28,6 +28,7 @@ import shutil
 import html
 import re
 import subprocess
+import sys
 from collections import defaultdict
 
 # ADT-115: the pricer. One direction only — adt_cost never imports this module,
@@ -2629,6 +2630,14 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
         print(f"Synced stage: frontmatter on {staged} briefs (folder=truth; state: kept in lockstep)")
     (BL / "BACKLOG-README.md").write_text(render_markdown(items))
     (BL / "kanban.html").write_text(render_html(items))
+    # AO-028: the management report is written beside the board from the same
+    # items. Its failure is reported and never stops the board.
+    try:
+        import management_report
+        (BL / "management-report.html").write_text(
+            management_report.render(items, REPO_NAME or REPO.name))
+    except Exception as e:  # noqa: BLE001 - the board must still render
+        print(f"management report skipped: {e}", file=sys.stderr)
 
     # Styled references page next to the board (if the source doc exists).
 

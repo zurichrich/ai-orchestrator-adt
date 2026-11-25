@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ · Management report</title>
+<style>
+/* Layout: a programme-office wall chart. Header and scope summary on top, then one
+   swimlane timeline: sticky lane labels on the left, a calendar scale that rolls up
+   quarter > month > week, and drill-down Epic > Feature > Ticket by double-click. */
+:root{
+  --bg:#EEF1F0; --panel:#FBFCFC; --ink:#14201D; --muted:#5D6B67; --faint:#636F6B;
+  --line:#DCE2E0; --line-strong:#B9C3C0; --accent:#0E6B66; --accent-ink:#FFFFFF;
+  --today:#C0401F; --crit:#C23A2B; --weekend:#E6EBE9; --good:#2E7D4F; --row-hover:#F1F5F4;
+  --c0:#3B6AD0; --c1:#B44D8F; --c2:#A86012; --c3:#1E7A67; --c4:#7152C9; --c5:#B5473A; --c6:#4E741D;
+  --f-display:system-ui,-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --f-body:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --lw:300px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1513; --panel:#161E1B; --ink:#E4EBE8; --muted:#9AA8A3; --faint:#8A9792;
+  --line:#26302D; --line-strong:#3A4642; --accent:#4FC2B6; --accent-ink:#0B1412;
+  --today:#FF7A57; --crit:#F0675A; --weekend:#131A18; --good:#5CC98A; --row-hover:#1B2522;
+  --c0:#7299EF; --c1:#DE7DBA; --c2:#E9A15A; --c3:#4FC2A6; --c4:#A08AF0; --c5:#E57E70; --c6:#93C258;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1513; --panel:#161E1B; --ink:#E4EBE8; --muted:#9AA8A3; --faint:#8A9792;
+  --line:#26302D; --line-strong:#3A4642; --accent:#4FC2B6; --accent-ink:#0B1412;
+  --today:#FF7A57; --crit:#F0675A; --weekend:#131A18; --good:#5CC98A; --row-hover:#1B2522;
+  --c0:#7299EF; --c1:#DE7DBA; --c2:#E9A15A; --c3:#4FC2A6; --c4:#A08AF0; --c5:#E57E70; --c6:#93C258;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1480px;margin:0 auto;padding-block:28px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp(28px,4vw,42px);line-height:1;margin:6px 0 0;letter-spacing:-.01em;text-wrap:balance;overflow-wrap:anywhere}
+.seg-ctl{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px}
+.seg-ctl button{border:0;background:transparent;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted)}
+.seg-ctl button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+.seg-ctl button:hover:not([aria-pressed="true"]){color:var(--ink)}
+.ctl-label{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);align-self:center;margin-right:-4px}
+
+/* Breadcrumb + scope summary */
+.scope{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px 28px;align-items:flex-end;border-top:1px solid var(--line-strong);padding-top:16px}
+.crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:13px}
+.crumbs button{border:0;background:none;padding:2px 4px;border-radius:4px;cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 35%,transparent);text-underline-offset:3px}
+.crumbs button:hover{text-decoration-color:var(--accent);background:var(--panel)}
+.crumbs .sep{color:var(--faint)}
+.crumbs .cur{font-weight:600;padding:2px 4px}
+.level-title{font-family:var(--f-display);font-stretch:85%;font-weight:700;font-size:24px;margin:4px 0 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.level-title .chip{width:12px;height:12px;border-radius:3px;background:var(--c)}
+.level-title small{font-family:var(--f-body);font-weight:500;font-size:13px;color:var(--muted);font-stretch:100%}
+.stats{display:flex;flex-wrap:wrap;gap:22px}
+.stat{display:grid;gap:2px}
+.stat b{font-family:var(--f-display);font-stretch:85%;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums;line-height:1}
+.stat span{font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.stagebar{flex:1 0 100%;display:grid;gap:6px}
+.stagebar .bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line)}
+.stagebar .bar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:9px;border-radius:2px;display:inline-block}
+.sw.done{background:var(--ink)}
+.sw.flight{background:repeating-linear-gradient(135deg,var(--ink) 0 3px,transparent 3px 6px);border:1px solid var(--ink)}
+.sw.idea{border:1.5px dashed var(--muted)}
+.sw.blocked{background:var(--crit)}
+.sw.today{width:2px;height:12px;background:var(--today)}
+
+/* Timeline */
+.gantt{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:max(440px,calc(100vh - 260px));position:relative;overscroll-behavior-x:contain}
+.g-inner{position:relative;min-width:100%}
+.g-head{position:sticky;top:0;z-index:4;display:flex;background:var(--panel);border-bottom:1px solid var(--line-strong)}
+.corner{position:sticky;left:0;z-index:5;width:var(--lw);flex:none;background:var(--panel);border-right:1px solid var(--line-strong);padding:10px 12px 8px 14px;display:flex;align-items:flex-end;flex-direction:column;align-items:stretch;justify-content:flex-end;gap:8px}
+.up-btn{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:3px 10px 3px 4px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--ink);max-width:100%;margin-left:-6px}
+.up-btn svg{width:14px;height:14px;flex:none;color:var(--muted)}
+.up-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up-btn:hover{border-color:var(--line-strong);background:var(--row-hover)}
+.up-btn:hover svg{color:var(--ink)}
+.corner .sub{display:block;font-size:11px;color:var(--faint);font-family:var(--f-body);letter-spacing:0;text-transform:none;font-weight:400}
+.corner b{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.corner span{font-size:12px;color:var(--faint)}
+.scale{position:relative;flex:none;height:52px}
+.tier{position:absolute;left:0;right:0}
+.tier.t1{top:0;height:26px}
+.tier.t2{top:26px;height:26px;border-top:1px solid var(--line)}
+.seg{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);overflow:hidden;white-space:nowrap}
+.tier.t1 .seg{border-left-color:var(--line-strong)}
+.seg span{position:sticky;left:calc(var(--lw) + 8px);display:inline-block;padding:6px 8px 0;font-size:12px}
+.tier.t1 .seg span{font-family:var(--f-display);font-stretch:85%;font-weight:650;font-size:13px}
+.tier.t2 .seg span{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);padding-top:6px}
+.seg.now span{color:var(--today)}
+.head-today{position:absolute;bottom:0;transform:translateX(-50%);background:var(--today);color:var(--accent-ink);font-family:var(--f-mono);font-size:10px;padding:1px 6px;border-radius:3px 3px 0 0;white-space:nowrap;z-index:2}
+
+.g-body{position:relative}
+.gridlayer{position:absolute;top:0;bottom:0;pointer-events:none;z-index:0}
+.gl{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.gl.strong{background:var(--line-strong)}
+.we{position:absolute;top:0;bottom:0;background:var(--weekend)}
+.todayline{position:absolute;top:0;bottom:0;width:2px;background:var(--today);opacity:.85;transform:translateX(-1px)}
+
+.row{display:flex;position:relative;z-index:1;border-bottom:1px solid var(--line);cursor:default}
+.row.group{min-height:68px}
+.row.ticket{min-height:34px}
+.row:hover .lab,.row:focus-within .lab,.row:focus .lab{background:var(--row-hover)}
+.row:focus{outline:none}
+.row:focus-visible .lab{box-shadow:inset 3px 0 0 var(--accent)}
+.row.group{cursor:zoom-in}
+.lab{position:sticky;left:0;z-index:3;width:var(--lw);flex:none;background:var(--panel);border-right:1px solid var(--line-strong);padding:10px 12px 10px 14px;display:grid;grid-template-columns:var(--cols);gap:0 14px;align-items:center}
+.c-name{display:grid;grid-template-columns:22px auto minmax(0,1fr);gap:2px 8px;align-items:center;min-width:0;margin-left:-8px}
+.c-name .chip{width:10px;height:10px;border-radius:3px;background:var(--c);grid-row:1}
+.c-name .name{font-weight:600;font-size:14px;line-height:1.25;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-name .meta{grid-column:2/4;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px}
+.cell{min-width:0;font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.c-cost{text-align:right;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.c-cost small{display:block;font-family:var(--f-body);font-size:10.5px;color:var(--faint)}
+.none{color:var(--faint)}
+.who{display:inline-flex;align-items:center;gap:6px;max-width:100%;vertical-align:middle}
+.who i{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:600;color:var(--accent-ink);background:var(--hue)}
+.who span{overflow:hidden;text-overflow:ellipsis}
+.who.inh i{background:transparent;color:var(--muted);border:1.5px dashed var(--hue)}
+.more{font-size:11px;color:var(--muted);margin-left:4px}
+.colhead{display:grid;grid-template-columns:var(--cols);gap:0 14px;align-items:end;width:100%}
+.colhead b:not(:first-child){font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.colhead .r{text-align:right}
+.colhead b{white-space:normal;line-height:1.2}
+.c-num{text-align:right;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.c-num small{display:block;font-family:var(--f-body);font-size:10.5px;color:var(--faint)}
+.bad{color:var(--crit)} .good{color:var(--good)}
+.toolbar{position:relative;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px 20px}
+.tgroup{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.colbtn{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:500;cursor:pointer}
+.colbtn svg{width:15px;height:15px;color:var(--muted)}
+.colbtn .caret{width:13px;height:13px}
+.colbtn:hover,.colbtn[aria-expanded="true"]{border-color:var(--line-strong)}
+.colbtn .cnt{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:9px;padding:0 6px;font-variant-numeric:tabular-nums}
+.colmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:min(520px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.16);padding:14px 16px;display:grid;gap:14px}
+.colmenu[hidden]{display:none}
+.cm-h,.colmenu legend{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;padding:0}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{border:1px solid var(--line);background:var(--bg);border-radius:14px;padding:4px 11px;font-size:12.5px;cursor:pointer}
+.presets button:hover{border-color:var(--line-strong)}
+.presets button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.cm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px 18px}
+.colmenu fieldset{border:0;margin:0;padding:0;display:grid;gap:2px;align-content:start}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 6px;margin-left:-6px;border-radius:6px;cursor:pointer}
+.chk:hover{background:var(--row-hover)}
+.chk input{accent-color:var(--accent);width:15px;height:15px;margin:0}
+.chk .lv{margin-left:auto;font-size:10.5px;color:var(--faint)}
+.sw.plan{border:1.5px solid var(--muted);background:transparent}
+.sw.base{height:5px;background:color-mix(in srgb,var(--ink) 32%,transparent)}
+.pcol{position:absolute;bottom:20px;border:1.5px solid var(--c);border-bottom:0;border-radius:2px 2px 0 0;background:color-mix(in srgb,var(--c) 10%,transparent)}
+.pspan{position:absolute;bottom:5px;height:5px;border-radius:3px;border:1.5px dashed color-mix(in srgb,var(--ink) 45%,transparent)}
+.pspan.solo{bottom:14px;height:6px;border-color:var(--c)}
+.tb.plan{background:color-mix(in srgb,var(--c) 12%,transparent);border:1.5px solid var(--c);color:var(--ink)}
+.tb.short{top:5px;height:14px;font-size:9.5px}
+.pb{position:absolute;top:22px;height:6px;border-radius:2px;background:color-mix(in srgb,var(--ink) 32%,transparent);pointer-events:none}
+.late{position:absolute;top:5px;line-height:14px;font-family:var(--f-mono);font-size:10px;font-weight:500;color:var(--crit);white-space:nowrap;pointer-events:none}
+.noplan{position:absolute;top:9px;font-size:11px;font-style:italic;color:var(--faint);white-space:nowrap}
+.colhead b:first-child,.colhead b.nm{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.lab .prog{flex:1;height:4px;border-radius:2px;background:var(--line);overflow:hidden;min-width:30px}
+.lab .prog i{display:block;height:100%;background:var(--c)}
+.open-btn{grid-row:1;width:22px;height:22px;border:0;background:transparent;border-radius:5px;padding:0;cursor:pointer;color:var(--faint);display:grid;place-items:center;transition:color .15s,background .15s,transform .15s}
+.open-btn svg{width:14px;height:14px}
+.row:hover .open-btn,.row:focus .open-btn{color:var(--ink)}
+.open-btn:hover{background:var(--line);transform:translateX(1px)}
+.c-name .meta{grid-column:3}
+
+.row.ticket .lab{padding-block:6px}
+.tid{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ttl{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.track{position:relative;flex:none}
+.span{position:absolute;bottom:14px;height:6px;border-radius:3px;background:color-mix(in srgb,var(--c) 22%,transparent)}
+.col{position:absolute;bottom:20px;background:var(--c);border-radius:2px 2px 0 0;opacity:.88}
+.col:hover{opacity:1}
+.openpill{position:absolute;bottom:9px;font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:9px;background:var(--panel);border:1px solid var(--c);color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.openpill em{font-style:normal;color:var(--crit);margin-left:4px}
+
+.tb{position:absolute;top:8px;height:18px;border-radius:4px;min-width:6px;display:flex;align-items:center;padding:0 6px;font-family:var(--f-mono);font-size:10px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.tb.done{background:var(--c);color:var(--accent-ink)}
+.tb.flight{background:repeating-linear-gradient(135deg,var(--c) 0 5px,color-mix(in srgb,var(--c) 45%,transparent) 5px 10px);color:var(--ink);border:1px solid var(--c)}
+.tb.idea{border:1.5px dashed var(--c);background:color-mix(in srgb,var(--c) 8%,transparent);color:var(--muted)}
+.tb.blocked{background:var(--crit);color:var(--accent-ink)}
+.tb.clipL{border-top-left-radius:0;border-bottom-left-radius:0}
+.tb:hover{filter:brightness(1.08);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 35%,transparent)}
+.tb .lbl{overflow:hidden;text-overflow:ellipsis}
+
+.tip{position:fixed;z-index:20;max-width:340px;background:var(--ink);color:var(--panel);padding:10px 12px;border-radius:8px;font-size:12.5px;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.18);line-height:1.4}
+.tip .t-id{font-family:var(--f-mono);font-size:11px;opacity:.7}
+.tip .t-title{font-weight:600;margin:2px 0 6px}
+.tip dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-variant-numeric:tabular-nums}
+.tip dt{opacity:.65}
+.tip dd{margin:0}
+
+.hint{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;font-size:12px;color:var(--muted)}
+.hint kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--panel)}
+.note{font-size:12px;color:var(--faint);max-width:80ch}
+
+/* Stacked label cells: phones, and any width where the chosen columns would
+   leave too little timeline. render() sets .stack. */
+.gantt.stack .lab{grid-template-columns:minmax(0,1fr)!important;gap:3px}
+.gantt.stack .lab .cell{font-size:11.5px;color:var(--muted)}
+.gantt.stack .lab .cell::before{content:attr(data-k) " ";font-family:var(--f-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.gantt.stack .c-cost,.gantt.stack .c-num{text-align:left}
+.gantt.stack .c-cost small{display:inline;margin-left:6px}
+.gantt.stack .who i{width:16px;height:16px;font-size:8.5px}
+.gantt.stack .row.ticket .tid{display:none}
+.gantt.stack .colhead{grid-template-columns:1fr!important}
+.gantt.stack .colhead b:not(.nm){display:none}
+@media (max-width:720px){
+  .c-name .meta .prog{display:none}
+  .open-btn{position:relative}
+  .open-btn::after{content:"";position:absolute;inset:-11px}
+  .seg-ctl button,.up-btn,.presets button{min-height:40px}
+  .chk input{width:20px;height:20px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Management report · Epic › Feature › Ticket</div>
+      <h1 id="projTitle"></h1>
+    </div>
+  </header>
+
+  <section class="scope">
+    <div>
+      <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+      <h2 class="level-title" id="levelTitle"></h2>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="stagebar">
+      <div class="bar" id="stageBar"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div class="tgroup">
+      <span class="ctl-label">Roll-up</span>
+      <div class="seg-ctl" id="zoomCtl" role="group" aria-label="Timeline roll-up">
+        <button id="z-quarter" data-z="quarter">Quarter</button>
+        <button id="z-month" data-z="month">Month</button>
+        <button id="z-week" data-z="week">Week</button>
+      </div>
+      <span class="ctl-label">Labels</span>
+      <div class="seg-ctl" id="dfCtl" role="group" aria-label="Week labels">
+        <button id="df-week" data-df="week">Week no.</button>
+        <button id="df-date" data-df="date">dd-mmm</button>
+      </div>
+    </div>
+    <div class="tgroup">
+      <span class="ctl-label">Timeline</span>
+      <div class="seg-ctl" id="layerCtl" role="group" aria-label="Timeline shows">
+        <button id="l-actual" data-l="actual">Actual</button>
+        <button id="l-plan" data-l="plan">Plan</button>
+        <button id="l-both" data-l="both">Plan vs actual</button>
+      </div>
+      <button type="button" class="colbtn" id="colBtn" aria-expanded="false" aria-controls="colMenu">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6.5 3v10M10 3v10"/></svg>
+        Columns <span class="cnt" id="colCount"></span>
+        <svg class="caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>
+      </button>
+    </div>
+    <div class="colmenu" id="colMenu" role="dialog" aria-label="Choose columns" hidden></div>
+  </div>
+
+  <div class="gantt" id="gantt"><div class="g-inner" id="gInner"></div></div>
+
+  <div class="hint">
+    <span>Click the chevron, double-click a lane, or press <kbd>Enter</kbd>, to open it. <kbd>Esc</kbd> goes up a level. Hover a bar for the ticket.</span>
+    <span id="rangeNote"></span>
+  </div>
+  <p class="note" id="method"></p>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const P = __DATA__;
+const DAY = 864e5;
+const ZOOM = {quarter:{px:2.6, bucket:7}, month:{px:7.5, bucket:7}, week:{px:26, bucket:1}};
+const now = new Date();
+const TODAY = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const STAGE_LABEL = {ideas:"Idea", planned:"Planned", building:"Building", qa:"QA", "ready-to-release":"Ready to release", blocked:"Blocked", done:"Done"};
+
+// Columns the left pane can show. `levels` limits a column to some levels; no `levels` means every level.
+const COLDEF = {
+  po:   {label:"Product owner", k:"PO",          w:128, levels:["epic","feature"], group:"People"},
+  dev:  {label:"Dev",           k:"Dev",         w:120, levels:["feature","ticket"], group:"People"},
+  ps:   {label:"Plan start",    k:"Plan start",  w:66,  num:1, group:"Schedule"},
+  pf:   {label:"Plan finish",   k:"Plan finish", w:66,  num:1, group:"Schedule"},
+  as:   {label:"Actual start",  k:"Actual start",w:66,  num:1, group:"Schedule"},
+  af:   {label:"Actual finish", k:"Actual finish",w:66, num:1, group:"Schedule"},
+  slip: {label:"Finish slip",   k:"Slip",        w:62,  num:1, group:"Schedule"},
+  pc:   {label:"Plan cost",     k:"Plan cost",   w:80,  num:1, group:"Cost"},
+  ac:   {label:"Actual cost",   k:"Actual cost", w:84,  num:1, group:"Cost"},
+  cv:   {label:"Cost variance", k:"Cost var.",   w:84,  num:1, group:"Cost"},
+};
+const ORDER = Object.keys(COLDEF);
+const PRESETS = [["People & cost",["po","dev","ac"]],["Schedule",["ps","pf","as","af","slip"]],["Budget",["pc","ac","cv"]],["Everything",ORDER]];
+
+const S = {e:null, f:null, zoom:"month", df:"week", layer:"actual", cols:["po","dev","ac"]};
+try {
+  const z = localStorage.getItem("adt-report-zoom"); if (z && ZOOM[z]) S.zoom = z;
+  const d = localStorage.getItem("adt-report-df"); if (d==="week"||d==="date") S.df = d;
+  const l = localStorage.getItem("adt-report-layer"); if (["actual","plan","both"].includes(l)) S.layer = l;
+  const c = JSON.parse(localStorage.getItem("adt-report-cols") || "null"); if (Array.isArray(c)) S.cols = ORDER.filter(k => c.includes(k));
+} catch(e) {}
+const save = (k,v) => { try { localStorage.setItem(k, v); } catch(e) {} };
+const narrow = matchMedia("(max-width:720px)");
+narrow.addEventListener("change", () => render(true));
+// The stacked layout depends on the window width, so a resize that crosses the
+// threshold re-renders.
+let resizeT;
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => {
+  const g = $("gantt"); if (g.classList.contains("stack") !== stackFor(g)) render(true); }, 150); });
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pd = s => s ? Date.UTC(+s.slice(0,4), +s.slice(5,7)-1, +s.slice(8,10)) : null;
+const dm = t => { const d = new Date(t); return String(d.getUTCDate()).padStart(2,"0")+"-"+MON[d.getUTCMonth()]; };
+const fmt = t => dm(t)+"-"+new Date(t).getUTCFullYear();
+const money = v => v >= 1000 ? "$"+(v/1000).toFixed(v>=10000?1:2)+"k" : "$"+v.toFixed(v<100?2:0);
+const NONE = `<span class="none">—</span>`;
+function signedMoney(v){ if (Math.abs(v) < 0.005) return `<span class="none">$0</span>`;
+  return v > 0 ? `<span class="bad">+${money(v)}</span>` : `<span class="good">−${money(-v)}</span>`; }
+function slipFmt(d, open){
+  if (d == null) return NONE;
+  if (d === 0) return `<span class="none">on time</span>`;
+  if (d < 0) return `<span class="good">−${-d}d</span>`;
+  return `<span class="bad" title="${open?"Still open, and past its plan finish":"Finished after its plan finish"}">${open?"≥":""}+${d}d</span>`;
+}
+const hueOf = h => `var(--c${[...h].reduce((a,c)=>a+c.charCodeAt(0),0) % 7})`;
+function who(h, opts={}){
+  if (!h) return NONE;
+  return `<span class="who${opts.inh?" inh":""}" style="--hue:${hueOf(h)}" title="@${esc(h)}${opts.inh?" (inherited from epic)":""}"><i>${esc(h[0].toUpperCase())}</i><span>${esc(h)}</span></span>`;
+}
+function whoList(devs){
+  if (!devs.length) return NONE;
+  return who(devs[0]) + (devs.length>1 ? `<span class="more">+${devs.length-1}</span>` : "");
+}
+function devsOf(list){ const m = new Map(); for (const t of list) for (const d of t.devs) m.set(d,(m.get(d)||0)+1); return [...m].sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
+const monday = t => t - ((new Date(t).getUTCDay()+6)%7)*DAY;
+function isoWeek(t){ const d=new Date(t); const day=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-day+3);
+  const fy=new Date(Date.UTC(d.getUTCFullYear(),0,4)); return 1+Math.round(((d-fy)/DAY-3+((fy.getUTCDay()+6)%7))/7); }
+const kind = st => st==="done" ? "done" : st==="blocked" ? "blocked" : st==="ideas" ? "idea" : "flight";
+
+{
+  P.T = P.tickets.map(r => ({id:r[0], title:r[1], e:r[2], f:r[3], stage:r[4], pri:r[5], type:r[6],
+    s:pd(r[7]), c:pd(r[8]), size:r[9], cost:r[10] ?? null, tier:r[11] || null, devs:r[12] || [],
+    ps:pd(r[13]), pf:pd(r[14]), pc:r[15] ?? null}))
+    .filter(t => t.s != null);
+  // Product owners and the epic and feature roll-ups are computed in Python and embedded.
+  const starts = P.T.map(t => t.s).sort((a,b)=>a-b);
+  const d = new Date(starts.length ? starts[Math.floor(starts.length*0.01)] : TODAY);
+  P.start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+  const t = new Date(TODAY);
+  P.end = Date.UTC(t.getUTCFullYear(), t.getUTCMonth()+2, 1);
+  P.clipped = P.T.filter(t => t.s < P.start).length;
+  const counts = {}; for (const x of P.T) counts[x.s] = (counts[x.s]||0)+1;
+  const [modeDay, modeN] = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0] || [TODAY, 0];
+  P.mode = {day:+modeDay, n:modeN};
+}
+
+function stats(list){
+  const o = {n:list.length, done:0, flight:0, idea:0, blocked:0};
+  for (const t of list) o[kind(t.stage)]++;
+  o.pct = o.n ? Math.round(o.done/o.n*100) : 0;
+  return o;
+}
+// Roll-up of the plan and actual fields over any set of tickets (one ticket, a feature, an epic).
+// One ticket's figures, in the shape of an embedded roll-up. Groups use the
+// roll-ups management_report.py computed; a single ticket needs no min or sum.
+function one(t){
+  const costed = t.cost != null, both = costed && t.pc != null;
+  let slip = null, slipOpen = false;
+  if (t.pf != null) {
+    if (t.c != null) slip = Math.round((t.c - t.pf)/DAY);
+    else if (TODAY > t.pf) { slip = Math.round((TODAY - t.pf)/DAY); slipOpen = true; }
+  }
+  return {n:1, nPlan:t.pf!=null?1:0, ps:t.ps, pf:t.pf, as:t.s, af:t.c, slip, slipOpen, pc:t.pc || 0,
+    ac:{sum:t.cost || 0, n:costed?1:0, of:1, approx:costed && !!t.tier && t.tier!=="measured"},
+    cvN:both?1:0, cv:both ? t.cost - t.pc : 0};
+}
+// A roll-up embedded by the renderer, keyed "all", "e<i>" or "e<i>-f<j>", with its dates parsed.
+function rolled(P, e, f){
+  const r = P.rollups[e == null ? "all" : f == null ? "e"+e : "e"+e+"-f"+f];
+  return {...r, ps:pd(r.ps), pf:pd(r.pf), as:pd(r.as), af:pd(r.af)};
+}
+// Stack the label cells on phones, or when the chosen columns would take more
+// than 60% of the chart's width.
+const stackFor = g => narrow.matches || S.lwWide > g.clientWidth * 0.6;
+const colorVar = e => `var(--c${e % 7})`;
+const levelOf = () => S.e==null ? "epic" : S.f==null ? "feature" : "ticket";
+const visibleCols = level => ORDER.filter(k => S.cols.includes(k) && (!COLDEF[k].levels || COLDEF[k].levels.includes(level)));
+const planShown = () => S.layer !== "actual" || S.cols.some(k => ["ps","pf","slip","pc","cv"].includes(k));
+
+function cell(P, key, a, ctx){
+  const d = COLDEF[key], group = !ctx.ticket;
+  let v;
+  switch (key) {
+    case "po": v = ctx.f == null ? who(P.epicPO[ctx.e]) : who(P.featPO[ctx.e][ctx.f][0], {inh: P.featPO[ctx.e][ctx.f][1]}); break;
+    case "dev": v = whoList(ctx.ticket ? ctx.ticket.devs : devsOf(ctx.list)); break;
+    case "ps": v = a.ps != null ? dm(a.ps) : NONE; break;
+    case "pf": v = a.pf != null ? dm(a.pf) : NONE; break;
+    case "as": v = dm(a.as); break;
+    case "af": v = a.af != null ? dm(a.af) : `<span class="none">open</span>`; break;
+    case "slip": v = slipFmt(a.slip, a.slipOpen); break;
+    case "pc": v = a.nPlan ? money(a.pc) + (group ? `<small>${a.nPlan} of ${a.n} planned</small>` : "") : NONE; break;
+    case "ac": v = a.ac.n ? (a.ac.approx?"~":"") + money(a.ac.sum) : (ctx.ticket?.tier==="unattributed" ? `<span class="none">n/a</span>` : NONE);
+               if (group) v += `<small>${a.ac.n} of ${a.ac.of} costed</small>`; break;
+    case "cv": v = a.cvN ? signedMoney(a.cv) + (group ? `<small>over ${a.cvN} ticket${a.cvN>1?"s":""}</small>` : "") : NONE; break;
+  }
+  return `<div class="cell${d.num?" c-num":""}" data-k="${d.k}">${v}</div>`;
+}
+
+function lanes(P){
+  if (S.e == null) return P.epics.map((name, e) => ({name, e, f:null, list:P.T.filter(t => t.e===e)}))
+      .filter(l => l.list.length).sort((a,b)=>b.list.length-a.list.length);
+  if (S.f == null) return P.features[S.e].map((name, f) => ({name, e:S.e, f, list:P.T.filter(t => t.e===S.e && t.f===f)}))
+      .filter(l => l.list.length).sort((a,b)=>b.list.length-a.list.length);
+  return null;
+}
+
+function tiers(P){
+  const out = {t1:[], t2:[], grid2:[], grid1:[], weekend:[]};
+  const {start, end} = P;
+  const months = []; { const d=new Date(start); let y=d.getUTCFullYear(), m=d.getUTCMonth();
+    while (Date.UTC(y,m,1) < end) { months.push([Date.UTC(y,m,1), Date.UTC(y,m+1,1), y, m]); m++; if (m>11){m=0;y++;} } }
+  const weeks = []; for (let w = monday(start); w < end; w += 7*DAY) weeks.push([Math.max(w,start), Math.min(w+7*DAY,end), w]);
+  const days = []; for (let d = start; d < end; d += DAY) days.push([d, d+DAY, d]);
+  if (S.zoom === "quarter") {
+    const qs = []; for (const [s,e,y,m] of months) { if (m%3===0 || !qs.length) qs.push([s,e,y,Math.floor(m/3)]); else qs[qs.length-1][1]=e; }
+    out.t1 = qs.map(([s,e,y,q]) => [s,e,`Q${q+1} ${y}`, TODAY>=s && TODAY<e]);
+    out.t2 = months.map(([s,e,y,m]) => [s,e,MON[m], TODAY>=s && TODAY<e]);
+    out.grid2 = months.map(x=>x[0]); out.grid1 = qs.map(x=>x[0]);
+  } else if (S.zoom === "month") {
+    out.t1 = months.map(([s,e,y,m]) => [s,e,`${MON[m]} ${y}`, TODAY>=s && TODAY<e]);
+    out.t2 = weeks.map(([s,e,w]) => [s,e, S.df==="week" ? `W${isoWeek(w)}` : dm(w), TODAY>=s && TODAY<e]);
+    out.grid2 = weeks.map(x=>x[0]); out.grid1 = months.map(x=>x[0]);
+  } else {
+    out.t1 = weeks.map(([s,e,w]) => [s,e, S.df==="week" ? `W${isoWeek(w)}` : `w/c ${dm(w)}`, TODAY>=s && TODAY<e]);
+    out.t2 = days.map(([s,e,d]) => { const x=new Date(d); return [s,e, S.df==="week" ? `${"MTWTFSS"[(x.getUTCDay()+6)%7]} ${x.getUTCDate()}` : dm(d), d===TODAY]; });
+    out.grid2 = days.map(x=>x[0]); out.grid1 = weeks.map(x=>x[0]);
+    out.weekend = days.filter(([d]) => { const k=new Date(d).getUTCDay(); return k===0||k===6; }).map(x=>x[0]);
+  }
+  return out;
+}
+
+function renderColMenu(){
+  const vis = new Set(S.cols);
+  const same = arr => arr.length === S.cols.length && arr.every(k => vis.has(k));
+  const groups = ["People","Schedule","Cost"];
+  $("colMenu").innerHTML = `<div class="cm-sec"><div class="cm-h">Quick sets</div><div class="presets">${
+      PRESETS.map(([n,arr],i) => `<button type="button" data-preset="${i}" aria-pressed="${same(arr)}">${n}</button>`).join("")}</div></div>
+    <div class="cm-grid">${groups.map(g => `<fieldset><legend>${g}</legend>${
+      ORDER.filter(k => COLDEF[k].group===g).map(k => `<label class="chk"><input type="checkbox" id="col-${k}" data-col="${k}"${vis.has(k)?" checked":""}>${COLDEF[k].label}${
+        COLDEF[k].levels ? `<span class="lv">${COLDEF[k].levels.map(x=>x[0].toUpperCase()+x.slice(1)+"s").join(", ")}</span>` : ""}</label>`).join("")}</fieldset>`).join("")}</div>`;
+}
+
+function render(keepScroll){
+  const px = ZOOM[S.zoom].px;
+  const W = Math.round((P.end-P.start)/DAY*px);
+  const X = t => (Math.min(Math.max(t,P.start),P.end)-P.start)/DAY*px;
+  const showA = S.layer !== "plan", showP = S.layer !== "actual";
+
+  $("projTitle").textContent = P.name;
+  for (const b of $("zoomCtl").children) b.setAttribute("aria-pressed", b.dataset.z===S.zoom);
+  for (const b of $("dfCtl").children) b.setAttribute("aria-pressed", b.dataset.df===S.df);
+  for (const b of $("layerCtl").children) b.setAttribute("aria-pressed", b.dataset.l===S.layer);
+  $("colCount").textContent = S.cols.length;
+
+  const level = levelOf();
+  const vis = visibleCols(level);
+  const nameW = level==="ticket" ? 62 + 14 + 240 : 250;
+  const lwWide = nameW + vis.reduce((a,k) => a + COLDEF[k].w + 14, 0) + 26;
+  const g0 = $("gantt");
+  S.lwWide = lwWide;
+  const stack = stackFor(g0);
+  g0.classList.toggle("stack", stack);
+  g0.style.setProperty("--lw", (narrow.matches ? 200 : stack ? 280 : lwWide) + "px");
+  g0.style.setProperty("--cols", (level==="ticket" ? "62px " : "") + "minmax(0,1fr) " + vis.map(k => COLDEF[k].w+"px").join(" "));
+
+  // breadcrumb + scope
+  const crumbs = [`<button data-go="root">${esc(P.name)}</button>`];
+  if (S.e != null) crumbs.push(`<span class="sep">›</span>`, S.f==null ? `<span class="cur">${esc(P.epics[S.e])}</span>` : `<button data-go="epic">${esc(P.epics[S.e])}</button>`);
+  if (S.f != null) crumbs.push(`<span class="sep">›</span><span class="cur">${esc(P.features[S.e][S.f])}</span>`);
+  $("crumbs").innerHTML = S.e==null ? `<span class="cur">${esc(P.name)}</span><span class="sep">›</span><span style="color:var(--faint)">all epics</span>` : crumbs.join("");
+
+  const L = lanes(P);
+  const scopeList = S.e==null ? P.T : S.f==null ? P.T.filter(t=>t.e===S.e) : P.T.filter(t=>t.e===S.e && t.f===S.f);
+  const st = stats(scopeList), sa = rolled(P, S.e, S.f);
+  const levelName = S.e==null ? "epics" : "features";
+  const chip = S.e!=null ? `<span class="chip" style="--c:${colorVar(S.e)}"></span>` : "";
+  const title = S.e==null ? "All epics" : S.f==null ? P.epics[S.e] : P.features[S.e][S.f];
+  $("levelTitle").innerHTML = `${chip}${esc(title)} <small>${L ? L.length+" "+(L.length===1 ? levelName.slice(0,-1) : levelName) : st.n+(st.n===1?" ticket":" tickets")}</small>`;
+  const nFeat = S.e==null ? P.features.reduce((a,fs,e)=>a+fs.filter((_,f)=>P.T.some(t=>t.e===e&&t.f===f)).length,0) : null;
+  const items = [];
+  if (S.e==null) items.push([L.length,"Epics"],[nFeat,"Features"]);
+  else if (S.f==null) items.push([L.length,"Features"]);
+  items.push([st.n,"Tickets"],[st.pct+"%","Done"],[st.flight,"In flight"],[st.idea,"Ideas"],[st.blocked,"Blocked"]);
+  items.push([sa.ac.n ? (sa.ac.approx?"~":"")+money(sa.ac.sum) : "—", `Actual cost · ${sa.ac.n} of ${sa.ac.of} costed`]);
+  if (planShown()) {
+    items.push([sa.nPlan ? money(sa.pc) : "—", `Plan cost · ${sa.nPlan} planned`]);
+    items.push([sa.cvN ? signedMoney(sa.cv) : "—", `Cost variance · ${sa.cvN} tickets`]);
+  }
+  const owner = S.e==null ? null : S.f!=null ? P.featPO[S.e][S.f][0] : P.epicPO[S.e];
+  if (owner) items.push([`<span style="font-size:15px">${who(owner)}</span>`, "Product owner"]);
+  $("stats").innerHTML = items.map(([v,l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  const segs = [["done",st.done,"var(--ink)"],["flight",st.flight,"repeating-linear-gradient(135deg,var(--ink) 0 3px,var(--muted) 3px 6px)"],["idea",st.idea,"var(--line-strong)"],["blocked",st.blocked,"var(--crit)"]];
+  $("stageBar").innerHTML = segs.filter(s=>s[1]).map(([k,v,c]) => `<i style="width:${v/st.n*100}%;background:${c}" title="${v}"></i>`).join("");
+  let legend = "";
+  if (showA) legend += [["done","Done"],["flight","In flight (planned → release)"],["idea","Idea"],["blocked","Blocked"]].map(([k,l]) => `<span><i class="sw ${k}"></i>${l}</span>`).join("");
+  if (S.layer==="plan") legend += `<span><i class="sw plan"></i>Planned start → finish</span>`;
+  if (S.layer==="both") legend += `<span><i class="sw base"></i>Plan baseline</span><span><b class="bad" style="font-family:var(--f-mono);font-size:11px">+3d</b> finished late</span>`;
+  legend += `<span><i class="sw today"></i>Today, ${fmt(TODAY)}</span>`;
+  $("legend").innerHTML = legend;
+
+  // scale + column headings
+  const T = tiers(P);
+  const segHtml = arr => arr.map(([s,e,l,cur]) => `<div class="seg${cur?" now":""}" style="left:${X(s)}px;width:${X(e)-X(s)}px"><span>${l}</span></div>`).join("");
+  const sub = level==="ticket" ? (S.layer==="plan" ? "plan start → finish" : "start → finish") : "› or double-click to open";
+  const nameHead = `<b class="nm">${level==="ticket" ? "Ticket" : level==="feature" ? "Feature" : "Epic"}<span class="sub">${sub}</span></b>`;
+  const headCells = (level==="ticket" ? `<b></b>` : "") + nameHead + vis.map(k => `<b${COLDEF[k].num?' class="r"':""}>${COLDEF[k].label}</b>`).join("");
+  const todayLbl = S.df==="week" ? `W${isoWeek(TODAY)} · today` : dm(TODAY);
+  const upTo = S.e==null ? null : S.f==null ? "All epics" : P.epics[S.e];
+  const upBtn = upTo ? `<button class="up-btn" data-up="1" title="Back up one level (Esc)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8 10 12.5"/></svg><span>${esc(upTo)}</span></button>` : "";
+  let html = `<div class="g-head"><div class="corner">${upBtn}<div class="colhead">${headCells}</div></div>
+    <div class="scale" style="width:${W}px"><div class="tier t1">${segHtml(T.t1)}</div><div class="tier t2">${segHtml(T.t2)}</div>
+    <div class="head-today" style="left:${X(TODAY)+px/2}px">${todayLbl}</div></div></div>`;
+
+  const strong = new Set(T.grid1);
+  let grid = T.weekend.map(d => `<div class="we" style="left:${X(d)}px;width:${px}px"></div>`).join("");
+  grid += T.grid2.map(t => `<div class="gl${strong.has(t)?" strong":""}" style="left:${X(t)}px"></div>`).join("");
+  grid += `<div class="todayline" style="left:${X(TODAY)+px/2}px"></div>`;
+  html += `<div class="g-body"><div class="gridlayer" style="left:var(--lw);width:${W}px">${grid}</div>`;
+
+  if (L) {
+    const B = ZOOM[S.zoom].bucket;
+    const bucketOf = t => B===7 ? monday(t) : t;
+    const count = (list, key) => { const m = new Map(); for (const t of list) if (t[key] != null) { const k = bucketOf(t[key]); m.set(k,(m.get(k)||0)+1); } return m; };
+    const histA = L.map(l => count(l.list, "c")), histP = L.map(l => count(l.list, "pf"));
+    const max = Math.max(1, ...(showA ? histA : []).flatMap(m => [...m.values()]), ...(showP ? histP : []).flatMap(m => [...m.values()]));
+    const bw = Math.max(2, B*px - (B===7 ? Math.min(4, px*1.2) : 4)), off = B===7 ? 1 : 2;
+    const wkLbl = k => B===7 ? (S.df==="week" ? `W${isoWeek(k)} ${new Date(k).getUTCFullYear()}` : `Week commencing ${fmt(k)}`) : fmt(k);
+    L.forEach((l, i) => {
+      const s = stats(l.list), a = rolled(P, l.e, l.f), c = colorVar(l.e);
+      const last = Math.max(...l.list.map(t => t.c || TODAY));
+      const open = s.flight + s.idea + s.blocked;
+      let marks = "";
+      if (showP) marks += [...histP[i]].map(([k,v]) => `<div class="pcol" data-col="${esc(wkLbl(k))}" data-n="${v}" data-what="planned to finish" style="left:${X(k)+off}px;width:${bw}px;height:${Math.max(3, v/max*36)}px"></div>`).join("");
+      if (showA) marks += [...histA[i]].map(([k,v]) => { const w = showP ? Math.max(2, bw*0.5) : bw;
+        return `<div class="col" data-col="${esc(wkLbl(k))}" data-n="${v}" data-what="closed" style="left:${X(k)+off+(bw-w)/2}px;width:${w}px;height:${Math.max(3, v/max*36)}px"></div>`; }).join("");
+      const spanA = showA ? `<div class="span" style="left:${X(a.as)}px;width:${Math.max(6,X(last)-X(a.as)+px)}px"></div>` : "";
+      const spanP = showP && a.pf ? `<div class="pspan${showA?"":" solo"}" style="left:${X(a.ps)}px;width:${Math.max(6,X(a.pf)-X(a.ps)+px)}px"></div>` : "";
+      const pill = open ? `<div class="openpill" style="left:${X(TODAY)+px/2+8}px">${open} open${s.blocked?`<em>${s.blocked} blocked</em>`:""}</div>` : "";
+      const key = S.e==null ? `e${l.e}` : `f${l.f}`;
+      const ctx = {e:l.e, f:l.f, list:l.list};
+      html += `<div class="row group" tabindex="0" data-open="${key}" style="--c:${c}" aria-label="${esc(l.name)}, ${s.n} tickets, ${s.pct}% done. Press Enter to open.">
+        <div class="lab"><div class="c-name"><button class="open-btn" data-open="${key}" tabindex="-1" aria-label="Open ${esc(l.name)}" title="Open"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button><span class="chip"></span><span class="name" title="${esc(l.name)}">${esc(l.name)}</span>
+          <div class="meta"><span>${s.n} · ${s.pct}%</span><span class="prog"><i style="width:${s.pct}%"></i></span></div></div>
+          ${vis.map(k => cell(P, k, a, ctx)).join("")}</div>
+        <div class="track" style="width:${W}px">${spanP}${spanA}${marks}${pill}</div></div>`;
+    });
+  } else {
+    const list = scopeList.slice().sort((a,b)=>a.s-b.s || (a.c||TODAY)-(b.c||TODAY));
+    const c = colorVar(S.e);
+    list.forEach((t, i) => {
+      const a = one(t);
+      const end = t.c || TODAY, k = kind(t.stage);
+      let bars = "";
+      if (S.layer === "plan") {
+        if (t.pf != null) { const x = X(t.ps), w = Math.max(6, X(t.pf)-x+px);
+          bars = `<div class="tb plan" data-t="${i}" tabindex="0" style="left:${x}px;width:${w}px">${w>54?`<span class="lbl">${esc(t.id)}</span>`:""}</div>`; }
+        else bars = `<div class="noplan" style="left:${X(t.s)}px">no plan yet</div>`;
+      } else {
+        const x = X(t.s), w = Math.max(6, X(end)-x+px);
+        bars = `<div class="tb ${k}${S.layer==="both"?" short":""}${t.s<P.start?" clipL":""}" data-t="${i}" tabindex="0" style="left:${x}px;width:${w}px">${w>54?`<span class="lbl">${esc(t.id)}</span>`:""}</div>`;
+        if (S.layer === "both" && t.pf != null) {
+          bars += `<div class="pb" style="left:${X(t.ps)}px;width:${Math.max(4, X(t.pf)-X(t.ps)+px)}px"></div>`;
+          const late = Math.round((end - t.pf)/DAY);
+          if (late > 0) bars += `<div class="late" style="left:${X(end)+px+5}px">+${late}d</div>`;
+        }
+      }
+      html += `<div class="row ticket" style="--c:${c}">
+        <div class="lab"><span class="tid">${esc(t.id)}</span><span class="ttl" title="${esc(t.title)}">${esc(t.title)}</span>
+          ${vis.map(key => cell(P, key, a, {e:t.e, f:t.f, ticket:t})).join("")}</div>
+        <div class="track" style="width:${W}px">${bars}</div></div>`;
+    });
+    S.list = list;
+  }
+  html += `</div>`;
+  const g = $("gantt"); const prevLeft = g.scrollLeft;
+  $("gInner").style.width = `calc(var(--lw) + ${W}px)`;
+  $("gInner").innerHTML = html;
+  if (S.refocus) {
+    S.refocus = false;
+    const inner = $("gInner");
+    (S.back && inner.querySelector(`.row.group[data-open="${S.back}"]`) || inner.querySelector(".up-btn")
+      || inner.querySelector(".row.group"))?.focus({preventScroll:true});
+    S.back = null;
+  }
+  if (keepScroll) g.scrollLeft = prevLeft;
+  else { g.scrollTop = 0; g.scrollLeft = Math.max(0, X(TODAY) - (g.clientWidth - parseFloat(getComputedStyle(g).getPropertyValue("--lw"))) * 0.72); }
+
+  $("rangeNote").textContent = `${fmt(P.start)} – ${fmt(P.end-DAY)}` + (P.clipped ? ` · ${P.clipped} older ticket${P.clipped>1?"s":""} start before the left edge` : "");
+  const modeTxt = P.mode.n > 20 ? ` ${P.mode.n} tickets share the start date ${fmt(P.mode.day)}, so many bars begin on that day.` : "";
+  $("method").textContent = `Built from this project's backlog cache on ${P.built}.` + modeTxt +
+    ` Actual start is a ticket's created date, actual finish its closed date, and actual cost its recorded cost (~ marks an estimate).` +
+    ` Plan start, plan finish and plan cost are the ticket's planned_start, planned_finish and planned_cost; a ticket with none shows none.` +
+    (P.unassigned ? ` ${P.unassigned} ticket${P.unassigned>1?"s have":" has"} no epic or feature and ${P.unassigned>1?"are":"is"} under Unassigned.` : "");
+}
+
+// navigation via hash: p, p-e3, p-e3-f2
+function toHash(){ return S.e==null ? "" : "e"+S.e + (S.f==null ? "" : "-f"+S.f); }
+function go(e, f){ S.refocus = true; S.e=e; S.f=f; const h = toHash(); if (location.hash.slice(1) !== h) location.hash = h; else render(); }
+function fromHash(){
+  const m = location.hash.slice(1).match(/^(?:e(\d+))?(?:-f(\d+))?$/);
+  S.e = m && m[1]!=null && P.epics[+m[1]] != null ? +m[1] : null;
+  S.f = S.e!=null && m[2]!=null && P.features[S.e][+m[2]] != null ? +m[2] : null;
+  render();
+}
+window.addEventListener("hashchange", fromHash);
+
+function openKey(key){ if (key[0]==="e") go(+key.slice(1), null); else go(S.e, +key.slice(1)); }
+const up = () => { if (S.f!=null) { S.back = "f"+S.f; go(S.e,null); } else if (S.e!=null) { S.back = "e"+S.e; go(null,null); } };
+const gantt = $("gantt");
+gantt.addEventListener("dblclick", ev => { const r = ev.target.closest(".row.group"); if (r) { window.getSelection()?.removeAllRanges(); openKey(r.dataset.open); } });
+gantt.addEventListener("click", ev => { const b = ev.target.closest(".open-btn"); if (b) openKey(b.dataset.open); if (ev.target.closest(".up-btn")) up(); });
+gantt.addEventListener("keydown", ev => { if (ev.key==="Enter") { const r = ev.target.closest(".row.group"); if (r) openKey(r.dataset.open); } });
+$("crumbs").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; if (b.dataset.go==="root") go(null,null); else go(S.e,null); });
+$("zoomCtl").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; S.zoom=b.dataset.z; save("adt-report-zoom",S.zoom); render(); });
+$("dfCtl").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; S.df=b.dataset.df; save("adt-report-df",S.df); render(true); });
+$("layerCtl").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; S.layer=b.dataset.l; save("adt-report-layer",S.layer); render(true); });
+
+// columns menu
+const colBtn = $("colBtn"), colMenu = $("colMenu");
+function setMenu(open){ if (open) renderColMenu(); colMenu.hidden = !open; colBtn.setAttribute("aria-expanded", open); }
+colBtn.addEventListener("click", () => setMenu(colMenu.hidden));
+colMenu.addEventListener("change", ev => { const k = ev.target.dataset.col; if (!k) return;
+  const set = new Set(S.cols); ev.target.checked ? set.add(k) : set.delete(k);
+  S.cols = ORDER.filter(x => set.has(x)); save("adt-report-cols", JSON.stringify(S.cols)); render(true);
+  renderColMenu(); $("col-"+k).focus(); });
+colMenu.addEventListener("click", ev => { const b = ev.target.closest("[data-preset]"); if (!b) return;
+  const i = b.dataset.preset; S.cols = [...PRESETS[+i][1]]; save("adt-report-cols", JSON.stringify(S.cols)); render(true);
+  renderColMenu(); colMenu.querySelector(`[data-preset="${i}"]`).focus(); });
+document.addEventListener("pointerdown", ev => { if (!colMenu.hidden && !colMenu.contains(ev.target) && !colBtn.contains(ev.target)) setMenu(false); });
+document.addEventListener("keydown", ev => { if (ev.key!=="Escape") return; hideTip();
+  if (!colMenu.hidden) { setMenu(false); colBtn.focus(); } else up(); });
+
+// tooltip
+const tip = $("tip");
+function hideTip(){ tip.hidden = true; }
+function place(ev){ const pad=14; let x=ev.clientX+pad, y=ev.clientY+pad; const r=tip.getBoundingClientRect();
+  if (x+r.width > innerWidth-8) x = ev.clientX-r.width-pad; if (y+r.height > innerHeight-8) y = ev.clientY-r.height-pad;
+  tip.style.left = Math.max(8,x)+"px"; tip.style.top = Math.max(8,y)+"px"; }
+function showFor(el, ev){
+  if (el.classList.contains("tb")) {
+    const t = S.list[+el.dataset.t], a = one(t);
+    const end = t.c || TODAY, d = Math.round((end-t.s)/DAY);
+    tip.innerHTML = `<div class="t-id">${esc(t.id)}${t.pri?" · "+esc(t.pri):""}${t.size?" · "+esc(t.size):""}${t.type?" · "+esc(t.type):""}</div>
+      <div class="t-title">${esc(t.title)}</div><dl><dt>Stage</dt><dd>${STAGE_LABEL[t.stage]||esc(t.stage)}</dd>
+      <dt>Plan</dt><dd>${t.pf!=null ? `${fmt(t.ps)} → ${fmt(t.pf)}` : "not planned"}</dd>
+      <dt>Actual</dt><dd>${fmt(t.s)} → ${t.c ? fmt(t.c) : "open"} (${t.c ? (d===0?"same day":d+" days") : d+" days so far"})</dd>
+      ${a.slip!=null ? `<dt>Finish slip</dt><dd>${a.slip===0?"on time":(a.slip>0?"+":"−")+Math.abs(a.slip)+" days"+(a.slipOpen?" and counting":"")}</dd>` : ""}
+      <dt>Plan cost</dt><dd>${t.pc!=null ? "$"+t.pc.toFixed(2)+'' : "—"}</dd>
+      <dt>Actual cost</dt><dd>${t.cost!=null ? (t.tier&&t.tier!=="measured"?"~":"")+"$"+t.cost.toFixed(2)+(t.tier?" ("+esc(t.tier)+")":"") : t.tier==="unattributed" ? "unattributed" : "not recorded"}</dd>
+      ${a.cvN ? `<dt>Cost variance</dt><dd>${(a.cv>=0?"+":"−")+"$"+Math.abs(a.cv).toFixed(2)}</dd>` : ""}
+      <dt>Product owner</dt><dd>${esc(P.featPO[t.e][t.f][0] || "—")}</dd>
+      <dt>Dev</dt><dd>${t.devs.length ? t.devs.map(x=>"@"+esc(x)).join(", ") : "no commits linked"}</dd></dl>`;
+  } else {
+    tip.innerHTML = `<div class="t-title" style="margin:0">${el.dataset.n} ${el.dataset.what}</div><div class="t-id">${esc(el.dataset.col)}</div>`;
+  }
+  tip.hidden = false; place(ev);
+}
+const TIPSEL = ".tb,.col,.pcol";
+gantt.addEventListener("mouseover", ev => { const el = ev.target.closest(TIPSEL); if (el) showFor(el, ev); });
+gantt.addEventListener("mousemove", ev => { if (!tip.hidden && ev.target.closest(TIPSEL)) place(ev); });
+gantt.addEventListener("mouseout", ev => { if (ev.target.closest(TIPSEL) && !ev.relatedTarget?.closest?.(TIPSEL)) hideTip(); });
+gantt.addEventListener("focusin", ev => { const el = ev.target.closest(".tb"); if (el) { const r = el.getBoundingClientRect(); showFor(el, {clientX:r.left, clientY:r.bottom}); } });
+gantt.addEventListener("focusout", hideTip);
+gantt.addEventListener("scroll", hideTip, {passive:true});
+document.addEventListener("pointerdown", ev => { if (ev.pointerType!=="mouse") { const el = ev.target.closest(TIPSEL); if (el) showFor(el, ev); else hideTip(); } });
+
+fromHash();
+</script>
+</html>

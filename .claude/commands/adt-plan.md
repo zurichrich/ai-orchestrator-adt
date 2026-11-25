@@ -581,6 +581,15 @@ Then, once, after the loop converges:
        measurements are in `docs/gate-tax-report.md`.
      - **Hard floor:** a guarded-path ticket is `full`, whatever your estimate
        of the effort. The path sets the tier, not the author.
+   - **Planned dates and cost** (AO-028), shown on the management report.
+     Ask the human for the planned start, planned finish and planned cost.
+     Write what they give as `planned_start:` and `planned_finish:`
+     (`YYYY-MM-DD`) and `planned_cost:` (USD). Leave any they don't give
+     absent. Never estimate one yourself: the report shows a missing plan as
+     missing, and a made-up one would be read as a real commitment.
+   - **`epic:` and `feature:`** must be set before step 5. If the brief has
+     none, ask for them, offering the names `.claude/tools/management_report.py
+     --list-groups` prints. The done-guard denies the move without them.
    - **`done_evidence:`**: write it here, in the frontmatter, and nowhere else.
      The `### Definition of Done` block in the spec body is generated from this
      list at push time and overwritten on every push, so any hand-edit there is
@@ -595,8 +604,9 @@ Then, once, after the loop converges:
    file is still in `ideas/` is rewritten back to `ideas`, and the next sync
    pushes that.
 
-   If the ticket has no track set, adt-done-guard.sh denies the move into planned/.
-   Set `track:` in step 4 and move it again.
+   If the ticket has no track set, or no `epic:` or `feature:`,
+   adt-done-guard.sh denies the move into planned/. Set them in step 4 and move
+   it again.
 
 6. **No plan PR.** The spec lives in the cache, outside every checkout, so there
    is no diff for a PR to carry. `adt watch` pushes the body to the Issue, and
@@ -615,4 +625,4 @@ You are choosing between two valid technical approaches with different
 long-term implications, or choosing not to follow a pattern the codebase
 usually uses.
 
-<!-- adt-bundle: v0.3.0 -->
+<!-- adt-bundle: v0.4.0 -->

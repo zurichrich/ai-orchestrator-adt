@@ -311,6 +311,23 @@ out="$(run_close)"
 rm -rf "$REPO_O" "$REPO_R" "$REPO_R2" "$LA" "$LA_EMPTY" 2>/dev/null || true
 rm -rf "$G" 2>/dev/null || true
 
+# AO-028: the plan gate also needs an epic and a feature, on every planning path.
+PG="$(mktemp -d)"; mkdir -p "$PG/ideas" "$PG/planned"
+printf -- '---\nslug: nogroup\ntrack: fast\n---\n' > "$PG/ideas/nogroup.md"
+printf -- '---\nslug: noepic\ntrack: full\nfeature: Search\n---\n' > "$PG/ideas/noepic.md"
+printf -- '---\nslug: blank\ntrack: standard\nepic:\nfeature: null\n---\n' > "$PG/ideas/blank.md"
+printf -- '---\nslug: grouped\ntrack: fast\nepic: Billing\nfeature: "Invoices"\n---\n' > "$PG/ideas/grouped.md"
+pg_fails=0
+for t in nogroup noepic blank; do
+  out="$(run_cwd "mv $PG/ideas/$t.md $PG/planned/$t.md" "$PG")"
+  { is_deny "$out" && printf '%s' "$out" | grep -q 'list-groups'; } \
+    || { bad "plan gate: $t must be denied naming --list-groups, got: $out"; pg_fails=1; }
+done
+out="$(run_cwd "mv $PG/ideas/grouped.md $PG/planned/grouped.md" "$PG")"
+[ -z "$out" ] || { bad "plan gate: a ticket with a track, epic and feature must pass silently, got: $out"; pg_fails=1; }
+[ "$pg_fails" -eq 0 ] && ok "plan gate denies a ticket with no epic or feature"
+rm -rf "$PG"
+
 # Cleanup
 git -C "$REPO" worktree remove "$REPO/../wt-$SLUG" --force 2>/dev/null || true
 rm -rf "$REPO" "$REPO/../wt-$SLUG" 2>/dev/null || true
