@@ -378,7 +378,7 @@ Releases are versioned (`VERSION` + a semver tag) and carry the advisory
 manifest ADT checks against. To pin a release rather than track `main`:
 
 ```bash
-git clone --branch v0.3.0 --depth 1 https://github.com/zurichrich/ai-orchestrator-adt.git ~/ai-orchestrator-adt
+git clone --branch v0.4.0 --depth 1 https://github.com/zurichrich/ai-orchestrator-adt.git ~/ai-orchestrator-adt
 ```
 
 Then, from your project:
