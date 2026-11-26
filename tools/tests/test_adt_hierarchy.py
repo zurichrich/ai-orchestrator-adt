@@ -14,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 TOOLS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLS))
 import adt_hierarchy as h  # noqa: E402
@@ -191,11 +193,8 @@ def test_stale_lock_is_taken_over(tmp_path, monkeypatch):
     _stub(tmp2, monkeypatch, lock=f"other:9 {int(time.time()) - 7200}", steal_after_create=True)
     cache2 = tmp2 / "cache"
     _ticket(cache2, "T-1")
-    try:
+    with pytest.raises(h.HierarchyError, match="another machine"):
         _apply(tmp2, cache2)
-        raise AssertionError("expected a stop")
-    except h.HierarchyError as e:
-        assert "another machine" in str(e)
     assert len(_creates(tmp2)) == 1
 
 
@@ -281,9 +280,6 @@ def test_lock_is_released_after_success_and_failure(tmp_path, monkeypatch):
     tmp2.mkdir()
     _stub(tmp2, monkeypatch, fail_create=True)
     _ticket(tmp2 / "cache", "T-1")
-    try:
+    with pytest.raises(h.HierarchyError):
         _apply(tmp2, tmp2 / "cache")
-        raise AssertionError("expected the create to fail")
-    except h.HierarchyError:
-        pass
     assert _state(tmp2)["lock"] == ""

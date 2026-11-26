@@ -24,6 +24,7 @@ No external dependencies. Frontmatter parser is intentionally small.
 from __future__ import annotations
 
 import argparse
+import collections
 import shutil
 import html
 import re
@@ -1335,13 +1336,6 @@ def assign_missing_ids(items: list[Item]) -> int:
     return derived
 
 
-def _pid(v) -> str:
-    """`AO-028` and `ao-28` name one ticket (adt_hierarchy.canon)."""
-    s = str(v or "").strip().strip("'\"").upper()
-    m = re.match(r"^([A-Z]+)-0*(\d+)$", s)
-    return f"{m.group(1)}-{m.group(2)}" if m else s
-
-
 def derive_parent_lanes(items: list["Item"]) -> int:
     """AO-028: an Epic's or Feature's lane follows its children. Features first
     (from their tickets), then Epics (from their Features): `done` when it has
@@ -1349,17 +1343,18 @@ def derive_parent_lanes(items: list["Item"]) -> int:
     otherwise `building`. The file is moved, so the folder stays the truth and
     sync_stage_frontmatter brings `stage:`/`state:` along. A hand move of an
     Epic or Feature is undone here. Returns the count moved."""
+    key = lambda v: canon_tix(str(v or "").strip("'\""))  # noqa: E731
+    kids: dict = collections.defaultdict(list)
+    for c in items:
+        if c.fm.get("parent"):
+            kids[key(c.fm.get("parent"))].append(c)
     moved = 0
-    for kind, child_kinds in (("features", None), ("epics", ("features",))):
-        for it in items:
-            if it.type != kind:
-                continue
-            kids = [c for c in items if c is not it
-                    and _pid(c.fm.get("parent")) == _pid(it.id)
-                    and (c.type in child_kinds if child_kinds
-                         else c.type not in ("epics", "features"))]
-            lanes = {c.status for c in kids}
-            lane = ("done" if kids and lanes == {"done"}
+    # Features first: an Epic's lane is read from its Features after they move.
+    for kind, is_kid in (("features", lambda c: c.type not in ("epics", "features")),
+                         ("epics", lambda c: c.type == "features")):
+        for it in (i for i in items if i.type == kind):
+            lanes = {c.status for c in kids[key(it.id)] if is_kid(c)}
+            lane = ("done" if lanes == {"done"}
                     else "ideas" if lanes <= {"ideas"} else "building")
             if lane == it.status:
                 continue
@@ -2670,7 +2665,9 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
     new = assign_missing_ids(items)
     if new:
         print(f"Assigned {new} new {ID_PREFIX}-N ids")
-    derive_parent_lanes(items)
+    moved = derive_parent_lanes(items)
+    if moved:
+        print(f"Moved {moved} Epic/Feature cards to the lane their children are in")
     staged = sync_stage_frontmatter(items)
     if staged:
         print(f"Synced stage: frontmatter on {staged} briefs (folder=truth; state: kept in lockstep)")

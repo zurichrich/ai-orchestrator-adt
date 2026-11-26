@@ -36,7 +36,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from adt_hierarchy import PARENT_TYPES, canon  # noqa: E402
+from adt_hierarchy import LANES, PARENT_TYPES, _field, canon  # noqa: E402
 
 UNASSIGNED = "Unassigned"
 _TEMPLATE = Path(__file__).with_name("management_report_template.html")
@@ -58,11 +58,6 @@ def _money(value) -> float | None:
         return float(s)
     except ValueError:
         return None
-
-
-def _field(fm: dict, key: str) -> str:
-    v = str(fm.get(key) or "").strip().strip("'\"")
-    return "" if v.lower() in ("null", "none", "~") else v
 
 
 def ticket_row(item, built: str) -> dict:
@@ -137,9 +132,7 @@ def rollup(rows: list[dict], today: str) -> dict:
 def build(items, project: str = "", today: str | None = None, issues_url: str = "") -> dict:
     """The page's data: epics, features, owners, ticket rows and roll-ups."""
     today = today or date.today().isoformat()
-    data = assemble([ticket_row(it, today) for it in items], project, today)
-    data["issuesUrl"] = issues_url
-    return data
+    return assemble([ticket_row(it, today) for it in items], project, today, issues_url)
 
 
 def _own_plan(r: dict, parent: dict | None, today: str) -> dict:
@@ -163,7 +156,7 @@ def _own_plan(r: dict, parent: dict | None, today: str) -> dict:
     return r
 
 
-def assemble(rows: list[dict], project: str, today: str) -> dict:
+def assemble(rows: list[dict], project: str, today: str, issues_url: str = "") -> dict:
     """build() over rows already read, so the CLI reads each ticket once."""
     by_id = {canon(r["id"]): r for r in rows}
     epic_rows = sorted((r for r in rows if r["kind"] == "epic"), key=lambda r: r["title"].lower())
@@ -228,7 +221,7 @@ def assemble(rows: list[dict], project: str, today: str) -> dict:
         "featPO": feat_po,
         "epicIssues": [num(e) for e in epic_rows],
         "featIssues": [[num(f) for f in fl] for fl in features],
-        "issuesUrl": "",
+        "issuesUrl": issues_url,
         "rollups": rollups,
         "tickets": tickets,
         "unassigned": len(unassigned),
@@ -253,7 +246,6 @@ def render(items, project: str = "", today: str | None = None, issues_url: str =
 
 # ── CLI ───────────────────────────────────────────────────────────────
 
-_LANES = ("ideas", "planned", "building", "qa", "blocked", "ready-to-release", "done")
 
 
 class _Ticket:
@@ -282,7 +274,7 @@ class _Ticket:
 
 def _load(cache: str):
     return [_Ticket(p) for p in sorted(Path(cache).glob("*/*/*.md"))
-            if p.parent.name in _LANES]
+            if p.parent.name in LANES]
 
 
 def problems(rows: list[dict], data: dict) -> list[str]:

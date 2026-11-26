@@ -955,14 +955,12 @@ def _conflict_check(path, data, cfg, current, issue, sync):
     return None
 
 
-def _canon_id(v) -> str:
-    """`AO-028` and `ao-28` name one ticket (adt_hierarchy.canon)."""
-    s = str(v or "").strip().strip("'\"").upper()
-    m = re.match(r"^([A-Z]+)-0*(\d+)$", s)
-    return f"{m.group(1)}-{m.group(2)}" if m else s
+def _parent_key(v) -> str:
+    """A `parent:` or `id:` value as the canonical ticket id (canon_tix)."""
+    return _canon_tix(str(v or "").strip().strip("'\""))
 
 
-def _mirror_parent(repo: str, path: str, data: dict, parents: dict,
+def _mirror_parent(repo: str, path: str, data: dict, parents: dict | None,
                    child_id=None) -> str | None:
     """AO-028: make the ticket's `parent:` a native GitHub sub-issue link.
 
@@ -973,7 +971,9 @@ def _mirror_parent(repo: str, path: str, data: dict, parents: dict,
     refusing the link itself; it is written to `sub_issue_refused:` so the push
     hash keeps it from being retried every tick. Any other failure raises and
     the caller retries next tick. Returns "linked", "refused" or None."""
-    parent = parents.get(_canon_id(data.get("parent")))
+    if parents is None or not data.get("parent"):
+        return None
+    parent = parents.get(_parent_key(data.get("parent")))
     pnum, num = (parent or {}).get("issue_number"), data.get("issue_number")
     if not pnum or not num:
         return None
@@ -1073,9 +1073,8 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False,
                 issue["title"], issue.get("body", "") or "(no body)")
         actions["action"] = "created"
         actions["number"] = new_number
-        if parents is not None and data.get("parent"):
-            actions["mirror"] = _mirror_parent(repo, path, data, parents,
-                                               (node or {}).get("id"))
+        actions["mirror"] = _mirror_parent(repo, path, data, parents,
+                                           (node or {}).get("id"))
         # A fresh Issue got its stage label at creation — same lifecycle
         # event as a stage push for the token checkpoint (ADT-100).
         actions["stage_label_changed"] = True
@@ -1165,11 +1164,10 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False,
     if board:
         changed.append(f"board:{board}")
 
-    if parents is not None and data.get("parent"):
-        mirror = _mirror_parent(repo, path, data, parents)
-        if mirror:
-            actions["mirror"] = mirror
-            changed.append(f"sub-issue:{mirror}")
+    mirror = _mirror_parent(repo, path, data, parents, current.get("databaseId"))
+    if mirror:
+        actions["mirror"] = mirror
+        changed.append(f"sub-issue:{mirror}")
 
     actions["action"] = "updated" if changed else "noop"
     actions["changes"] = changed
@@ -1908,6 +1906,8 @@ def _issue_from_rest(item: dict) -> dict:
     return {
         "number": item.get("number"),
         "id": item.get("node_id"),
+        # AO-028: the sub-issue API takes the numeric id, not the node id.
+        "databaseId": item.get("id"),
         "title": item.get("title"),
         "body": item.get("body") or "",
         "state": item.get("state"),
@@ -2292,9 +2292,9 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     # AO-028: parents push first, so an Epic or Feature created this pass has a
     # number before its children link to it. The sort is stable.
     rank = {"epic": 0, "feature": 1}
-    files.sort(key=lambda f: rank.get(str(f[1].get("type") or "").lower(), 2))
-    parents = {_canon_id(d.get("id")): d for _, d in files
-               if str(d.get("type") or "").lower() in rank}
+    kind = lambda d: str(d.get("type") or "").lower()  # noqa: E731
+    files.sort(key=lambda f: rank.get(kind(f[1]), 2))
+    parents = {_parent_key(d.get("id")): d for _, d in files if kind(d) in rank}
     per_number = collections.Counter(int(d["issue_number"]) for _, d in files
                                      if d.get("issue_number"))
 

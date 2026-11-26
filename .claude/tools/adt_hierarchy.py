@@ -40,7 +40,9 @@ from pathlib import Path
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ticket_serializer import FILING_LABEL, meta_from_body, parse_md  # noqa: E402
+from adt_devs import config_value  # noqa: E402
+from ticket_serializer import (FILING_LABEL, _strip_slug_trailer,  # noqa: E402
+                               _with_slug_trailer, meta_from_body, parse_md)
 
 LANES = ("ideas", "planned", "building", "qa", "blocked", "ready-to-release", "done")
 PARENT_TYPES = ("epic", "feature")
@@ -203,7 +205,8 @@ def _lock_holder(repo: str) -> str:
 def take_lock(repo: str, me: str, now: float | None = None) -> bool:
     """True when this run now holds the `adt:grouping` label."""
     now = time.time() if now is None else now
-    for attempt in (1, 2):
+
+    def create() -> bool:
         try:
             _gh(["api", "-X", "POST", f"repos/{repo}/labels", "-f", f"name={LOCK_LABEL}",
                  "-f", "color=ededed", "-f", f"description={me} {int(now)}"])
@@ -211,14 +214,17 @@ def take_lock(repo: str, me: str, now: float | None = None) -> bool:
         except HierarchyError as e:
             if "already_exists" not in str(e) and "422" not in str(e):
                 raise
-        held_since = _lock_holder(repo).rpartition(" ")[2]
-        if attempt == 2 or not held_since.isdigit() \
-                or now - int(held_since) < LOCK_STALE_SECONDS:
             return False
-        # An hour old: its run died. Take it over; still_mine() catches the
-        # case where another machine took it over at the same moment.
-        _gh(["api", "-X", "DELETE", _label_path(repo, LOCK_LABEL)])
-    return False
+
+    if create():
+        return True
+    held_since = _lock_holder(repo).rpartition(" ")[2]
+    if not held_since.isdigit() or now - int(held_since) < LOCK_STALE_SECONDS:
+        return False
+    # An hour old: its run died. Take it over; still_mine() catches the case
+    # where another machine took it over at the same moment.
+    _gh(["api", "-X", "DELETE", _label_path(repo, LOCK_LABEL)])
+    return create()
 
 
 def still_mine(repo: str, me: str) -> bool:
@@ -247,8 +253,7 @@ def list_remote(repo: str) -> list:
             for it in items:
                 if "pull_request" in it:
                     continue
-                body = re.sub(r"\n*<!-- adt: slug=[^>]*-->\s*\Z", "", it.get("body") or "")
-                meta = meta_from_body(body) or {}
+                meta = meta_from_body(_strip_slug_trailer(it.get("body") or "")) or {}
                 out.append({"number": it["number"], "title": it["title"], "type": typ,
                             "parent": canon(meta.get("parent"))})
             if len(items) < 100:
@@ -282,7 +287,7 @@ def create(repo: str, prefix: str, cache, typ: str, title: str,
         slug, n = f"{typ}-{base}-{n}", n + 1
     issue = json.loads(_gh([
         "api", "-X", "POST", f"repos/{repo}/issues", "-f", f"title={title}",
-        "-f", f"body={typ.capitalize()} ticket, created by /adt-group.\n\n<!-- adt: slug={slug} -->",
+        "-f", "body=" + _with_slug_trailer(f"{typ.capitalize()} ticket, created by /adt-group.", slug),
         "-f", f"labels[]=type:{typ}", "-f", "labels[]=stage:ideas",
         "-f", f"labels[]={FILING_LABEL}"]))
     num = issue["number"]
@@ -415,18 +420,6 @@ def apply(epics: list, cache, repo: str, prefix: str, me: str | None = None) -> 
 
 # ── CLI ───────────────────────────────────────────────────────────────
 
-def _config(key: str) -> str:
-    try:
-        top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                             capture_output=True, text=True).stdout.strip()
-        for ln in (Path(top or ".") / ".adt" / "config.yaml").read_text().splitlines():
-            if ln.startswith(f"{key}:"):
-                return ln.split(":", 1)[1].strip().strip("'\"")
-    except OSError:
-        pass
-    return ""
-
-
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Epic and Feature tickets")
     g = ap.add_mutually_exclusive_group(required=True)
@@ -455,7 +448,7 @@ def main(argv=None) -> int:
             print(line)
         print("Nothing changed. Run again with --yes to apply.")
         return 0
-    repo, prefix = a.repo or _config("repo"), a.prefix or _config("id_prefix") or "TIX"
+    repo, prefix = a.repo or config_value("repo"), a.prefix or config_value("id_prefix") or "TIX"
     if not repo:
         print("no repo: pass --repo or set repo: in .adt/config.yaml", file=sys.stderr)
         return 2

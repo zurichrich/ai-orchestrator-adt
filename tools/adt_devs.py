@@ -74,17 +74,22 @@ def stamp(path: Path, repo: str) -> list[str] | None:
     return devs
 
 
-def default_repo() -> str:
+def config_value(key: str) -> str:
+    """A scalar from this checkout's .adt/config.yaml, or "" when absent."""
     try:
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
                              capture_output=True, text=True).stdout.strip()
         cfg = Path(top or ".") / ".adt" / "config.yaml"
         for ln in cfg.read_text(encoding="utf-8").splitlines():
-            if ln.startswith("repo:"):
+            if ln.startswith(f"{key}:"):
                 return ln.split(":", 1)[1].strip().strip("'\"")
     except OSError:
         pass
     return ""
+
+
+def default_repo() -> str:
+    return config_value("repo")
 
 
 def main(argv=None) -> int:
