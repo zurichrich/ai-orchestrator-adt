@@ -22,9 +22,10 @@ is measured against them, and the children's roll-up is kept beside it as
 `kids` so the page can show both.
 
 CLI, against a backlog cache directory:
-  --list-groups <cache>     print each epic, its owner and its features
-  --check-assigned <cache>  exit 1 if a ticket has no epic or feature, or an
-                            epic has no product owner
+  --list-groups <cache>     print each Epic and Feature with its ID and owner
+  --check-assigned <cache>  exit 1 if a ticket is not under a Feature and an
+                            Epic, a Feature has no Epic, an Epic has no product
+                            owner, or GitHub refused a sub-issue link
 """
 
 from __future__ import annotations

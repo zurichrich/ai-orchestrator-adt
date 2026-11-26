@@ -11,6 +11,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 TOOLS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLS))
 import build_kanban  # noqa: E402
@@ -302,6 +304,46 @@ def test_own_plan_is_compared_with_children(tmp_path):
     assert e["slip"] == 2                       # finished 22nd against its own 20th
     assert e["cv"] == -4.0 and e["cvN"] == 1    # 6 spent against its own 10
     assert "kids" not in f and f["slip"] == -3  # the Feature has no plan of its own
+
+
+def test_open_epic_slips_against_its_own_finish(tmp_path):
+    from datetime import date
+    _epic(tmp_path, "e1", "E", product_owner="amy", planned_finish="2026-01-10")
+    _feature(tmp_path, "f1", "F", "E1")
+    _ticket(tmp_path, "a", stage="building", parent="F1", planned_finish="2026-02-01")
+    e = _data(_render(tmp_path))["rollups"]["e0"]
+    assert e["pf"] == "2026-01-10" and e["kids"]["pf"] == "2026-02-01"
+    assert e["slipOpen"] is True
+    assert e["slip"] == (date.today() - date(2026, 1, 10)).days
+
+
+def _kids_note(cases: list) -> list:
+    """Run the page's own kidsNote() under node over (rollup, key) cases."""
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        pytest.skip("node is not installed; kidsNote runs only in the page")
+    src = (Path(management_report.__file__).parent / "management_report_template.html").read_text()
+    m = re.search(r"function kidsNote\(a, k, fmt\)\{.*?\n\}\n", src, re.S)
+    assert m, "kidsNote not found in the template"
+    js = m.group(0) + f"""
+const fmt = v => "<" + v + ">";
+console.log(JSON.stringify({json.dumps(cases)}.map(([a, k]) => kidsNote(a, k, fmt))));"""
+    out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
+def test_children_line_shows_only_when_it_differs():
+    kids = {"ps": 1, "pf": 5, "pc": 4, "nPlan": 1}
+    got = _kids_note([
+        [{"pf": 9, "pc": 4, "kids": kids}, "pf"],    # own finish differs: shown
+        [{"pf": 9, "pc": 4, "kids": kids}, "pc"],    # same cost: hidden
+        [{"pf": 5, "pc": 10, "kids": kids}, "pc"],   # own budget differs: shown
+        [{"pf": 5, "pc": 10, "kids": {**kids, "nPlan": 0}}, "pc"],  # no child costed
+        [{"pf": 9, "pc": 4}, "pf"],                  # no own plan: no line
+    ])
+    assert got == ['<small class="kids">children: <span><5></span></small>', "",
+                   '<small class="kids">children: <span><4></span></small>', "", ""]
 
 
 def test_epic_and_feature_rows_link_to_their_issues(tmp_path):
