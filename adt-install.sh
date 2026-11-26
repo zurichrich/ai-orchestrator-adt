@@ -580,7 +580,7 @@ if [[ "$DO_GITHUB" == true ]]; then
   # AO-028: every ticket belongs to a Feature and an Epic. An update from 0.4.0
   # or earlier has none, so say how many need grouping. Only /adt-group creates
   # the Epic and Feature Issues, after the product owner approves the outline.
-  python3 "$ADT_DIR/tools/adt_hierarchy.py" --status "$cache_dir" 2>/dev/null || true
+  python3 "$ADT_DIR"/tools/adt_hierarchy.py --status "$cache_dir" 2>/dev/null || true
 
   say "▸ Installing the background board-sync watcher…"
   # A watcher MUST exist for every project ADT runs in — without it the board
