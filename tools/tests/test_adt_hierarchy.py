@@ -211,6 +211,10 @@ def test_resolve_follows_the_chain(tmp_path):
     assert h.resolve(t, "T-3") == ("T-2", "T-1")
     assert [h.resolve(t, x) for x in ("T-4", "T-5", "T-7", "T-6")] == [None] * 4
     assert h.resolve_path(t["T-3"]["path"]) and not h.resolve_path(t["T-7"]["path"])
+    # A ticket with no id: is keyed by its file name on both sides.
+    p = tmp_path / "enhancements" / "ideas" / "no-id.md"
+    p.write_text("---\nslug: no-id\nparent: T-2\n---\n")
+    assert h.resolve_path(p)
 
 
 def test_status_counts_every_unresolved_ticket(tmp_path, capsys):

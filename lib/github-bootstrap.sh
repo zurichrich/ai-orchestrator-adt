@@ -455,7 +455,7 @@ in lockstep. Ticket ids derive from the issue number (\`${id_prefix}-N\`). How
 the model works: \`$ADT_DIR/docs/backlog-sync.md\`.
 
 - **Board (local):** \`.adt/kanban.html\` — right-click it in your editor's file tree → **Open in Browser** (refreshed every \`adt watch\` pass).
-- **Management report (local):** \`.adt/management-report.html\` — epics, features and tickets on a timeline, with owners, devs and cost. Refreshed with the board.
+- **Management report (local):** \`.adt/management-report.html\` — Epic and Feature tickets and their children on a timeline, with owners, devs and cost. Refreshed with the board. \`/adt-group\` groups tickets that have no parent Feature.
 - **Board (GitHub Project):** $board_url
 - **Backlog issues:** https://github.com/$repo/issues
 - **Local cache (working surface):** \`$cache\`

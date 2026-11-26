@@ -165,6 +165,12 @@ your **GitHub board** and your local **`kanban.html`**. Beside the board it writ
 `.adt/management-report.html`: the project's epics, features and tickets on a
 timeline, with owners, devs, plan against actual, and cost.
 
+Epics and Features are tickets of their own, with their own GitHub Issues, and
+every ticket names its Feature with `parent:`. A project updating from ADT 0.4.0
+or earlier has none yet: the installer prints how many tickets need grouping,
+and `/adt-group` proposes the grouping, shows it to the product owner, and
+creates the Epic and Feature tickets on their yes.
+
 **A second machine, or a teammate, joins the install.** Run the same command in
 their clone. Before it asks anything, the installer reads the ADT layer
 committed on `origin/<main>`. If ADT is already installed there, it says so,

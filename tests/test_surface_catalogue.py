@@ -28,6 +28,10 @@ BOARD_EXEMPT: dict[str, str] = {
     "decide": "cross-cutting — an ADR can be recorded from any stage, so no "
               "single lane owns it. Surfaced via docs/references.md's "
               "cross-cutting section instead of a lane header.",
+    "group": "cross-cutting — AO-028: groups tickets in every lane, done "
+             "included, usually once after an update. Surfaced via "
+             "docs/references.md's cross-cutting section and the installer's "
+             "message.",
 }
 
 # Hooks shipped as templates: a project copies one, fills in its own patterns

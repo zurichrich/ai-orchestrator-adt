@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "bundle_version": "0.4.0",
-  "source_commit": "f8e22feeea19a209b02d725083c7addcc4222073",
+  "source_commit": "e9277ea337f315d835fbf902aeea071bc96e37f4",
   "source_repo": "zurichrich/ai-orchestrator-adt",
   "files": [
     {
@@ -34,7 +34,7 @@
     },
     {
       "path": "commands/adt-brief.md",
-      "sha256": "186198f83a7f41f9ed959177c901e149d1d5da30bcfa0bc7333d396e0229cfa9"
+      "sha256": "5b2f86e5c44208e75317ef7162dc52220bd775cec4702891a4686e3f295512d6"
     },
     {
       "path": "commands/adt-build-todone.md",
@@ -53,12 +53,16 @@
       "sha256": "6957de42036c7970a7f4a163cca2a295cbc6672712777a57fd891cf27d48c5e2"
     },
     {
+      "path": "commands/adt-group.md",
+      "sha256": "c027518787d0d16a4c5fdf193618833000eab764e63c56fb5ac6563f0b211616"
+    },
+    {
       "path": "commands/adt-plan-fasttrack.md",
       "sha256": "a3696eceb4ed6b07abfc4765adfe43f53f5f00224346391532695d3ee49fe0d2"
     },
     {
       "path": "commands/adt-plan.md",
-      "sha256": "7f800a92a46afd79d9f71efdaf858d83d8193368ec176583601198cb6d194da4"
+      "sha256": "4f00a2b7c5312c56a14edbfb220fe2b372e55e13935925dddfdb6f3bbc18fa6b"
     },
     {
       "path": "commands/adt-qa-run.md",
@@ -106,7 +110,7 @@
     },
     {
       "path": "hooks/adt-done-guard.sh",
-      "sha256": "70589815c9c30913a63570a194d694a3514c370fc2f47e9754af0ca5a7443f40"
+      "sha256": "6c757498b5380f46f4ba979a6c1e581b5277570ab4c8f1c3706e1ab3a4766341"
     },
     {
       "path": "hooks/adt-mark-tix.sh",
@@ -185,12 +189,16 @@
       "sha256": "6cc0fa8d51ce97c2160b3caee51b30e69f7ab864afab892102e256c3af10a0a4"
     },
     {
+      "path": "tools/adt_hierarchy.py",
+      "sha256": "b6062b7ad049b22be178b0ebcf7da85e490072e25d9dbff0e99b1bf43ea56cbb"
+    },
+    {
       "path": "tools/management_report.py",
-      "sha256": "ecd2d94a3d0383a017a2f774315103b0194ff3f2120087138c77c285a7b518f5"
+      "sha256": "20109712a0f1d15aebd7a3f28ae1584b720178cd15b4ea675d511f6a46604fe8"
     },
     {
       "path": "tools/management_report_template.html",
-      "sha256": "d607e2c467f4574524c0951d8e2a59fe76cff4ff00902c3fdec9fd59edb37805"
+      "sha256": "ac85ef9ea380ea5f98fa092bb3abcf21e237fd2dcd6fb6bb79f720f7857d8400"
     },
     {
       "path": "tools/plan-quality-calibration.md",
@@ -202,7 +210,7 @@
     },
     {
       "path": "tools/ticket_serializer.py",
-      "sha256": "1be55931a8afb6b110d7a8daae6663f40c4699447eecac1c75046dcbf97863e8"
+      "sha256": "717c08fa2a97c2a185c009e501195746ca07dc15f0d1ccb6595d67319d3c038f"
     }
   ]
 }

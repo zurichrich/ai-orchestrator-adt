@@ -78,7 +78,7 @@ def load(cache) -> dict:
         title = _field(data, "title") or next(
             (ln[2:].strip() for ln in body.splitlines() if ln.startswith("# ")), p.stem)
         typ = _field(data, "type").lower()
-        rec = {"id": canon(_field(data, "id")) or p.stem, "type": typ, "title": title,
+        rec = {"id": canon(_field(data, "id") or p.stem), "type": typ, "title": title,
                "parent": canon(_field(data, "parent")), "lane": p.parent.name,
                "path": p, "fm": data}
         out[rec["id"]] = rec
@@ -106,7 +106,7 @@ def resolve_path(md_path) -> bool:
     grandparent of its lane folder (<cache>/<type>/<lane>/<slug>.md)."""
     p = Path(md_path)
     tickets = load(p.parent.parent.parent)
-    tid = canon(_field(parse_md(p.read_text(encoding="utf-8")), "id")) or p.stem
+    tid = _field(parse_md(p.read_text(encoding="utf-8")), "id") or p.stem
     return resolve(tickets, tid) is not None
 
 

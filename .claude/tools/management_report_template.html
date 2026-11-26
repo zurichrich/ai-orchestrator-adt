@@ -116,6 +116,9 @@ h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp
 .c-name{display:grid;grid-template-columns:22px auto minmax(0,1fr);gap:2px 8px;align-items:center;min-width:0;margin-left:-8px}
 .c-name .chip{width:10px;height:10px;border-radius:3px;background:var(--c);grid-row:1}
 .c-name .name{font-weight:600;font-size:14px;line-height:1.25;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.name{color:inherit;text-decoration:none}
+a.name:hover,a.name:focus-visible{text-decoration:underline}
+.cell small.kids{display:block;font-family:var(--f-body);font-size:10.5px;color:var(--faint)}
 .c-name .meta{grid-column:2/4;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px}
 .cell{min-width:0;font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .c-cost{text-align:right;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
@@ -395,7 +398,8 @@ function one(t){
 // A roll-up embedded by the renderer, keyed "all", "e<i>" or "e<i>-f<j>", with its dates parsed.
 function rolled(P, e, f){
   const r = P.rollups[e == null ? "all" : f == null ? "e"+e : "e"+e+"-f"+f];
-  return {...r, ps:pd(r.ps), pf:pd(r.pf), as:pd(r.as), af:pd(r.af)};
+  const kids = r.kids && {...r.kids, ps:pd(r.kids.ps), pf:pd(r.kids.pf)};
+  return {...r, ps:pd(r.ps), pf:pd(r.pf), as:pd(r.as), af:pd(r.af), kids};
 }
 // Stack the label cells on phones, or when the chosen columns would take more
 // than 60% of the chart's width.
@@ -405,18 +409,34 @@ const levelOf = () => S.e==null ? "epic" : S.f==null ? "feature" : "ticket";
 const visibleCols = level => ORDER.filter(k => S.cols.includes(k) && (!COLDEF[k].levels || COLDEF[k].levels.includes(level)));
 const planShown = () => S.layer !== "actual" || S.cols.some(k => ["ps","pf","slip","pc","cv"].includes(k));
 
+// An Epic or Feature with its own plan shows its children's value beneath,
+// muted, when the two differ.
+function kidsNote(a, k, fmt){
+  if (!a.kids) return "";
+  const own = a[k], kid = a.kids[k];
+  const has = k === "pc" ? a.kids.nPlan > 0 : kid != null;
+  if (!has || +own === +kid) return "";
+  return `<small class="kids">children: ${fmt(kid)}</small>`;
+}
+// The Issue an Epic or Feature row stands for, when the renderer knew the repo.
+const issueOf = (e, f) => {
+  const n = f == null ? P.epicIssues[e] : (P.featIssues[e] || [])[f];
+  return n && P.issuesUrl ? `${P.issuesUrl}/${n}` : null;
+};
+
 function cell(P, key, a, ctx){
   const d = COLDEF[key], group = !ctx.ticket;
   let v;
   switch (key) {
     case "po": v = ctx.f == null ? who(P.epicPO[ctx.e]) : who(P.featPO[ctx.e][ctx.f][0], {inh: P.featPO[ctx.e][ctx.f][1]}); break;
     case "dev": v = whoList(ctx.ticket ? ctx.ticket.devs : devsOf(ctx.list)); break;
-    case "ps": v = a.ps != null ? dm(a.ps) : NONE; break;
-    case "pf": v = a.pf != null ? dm(a.pf) : NONE; break;
+    case "ps": v = (a.ps != null ? dm(a.ps) : NONE) + kidsNote(a, "ps", dm); break;
+    case "pf": v = (a.pf != null ? dm(a.pf) : NONE) + kidsNote(a, "pf", dm); break;
     case "as": v = dm(a.as); break;
     case "af": v = a.af != null ? dm(a.af) : `<span class="none">open</span>`; break;
     case "slip": v = slipFmt(a.slip, a.slipOpen); break;
-    case "pc": v = a.nPlan ? money(a.pc) + (group ? `<small>${a.nPlan} of ${a.n} planned</small>` : "") : NONE; break;
+    case "pc": v = a.kids ? money(a.pc) + kidsNote(a, "pc", money)
+                          : a.nPlan ? money(a.pc) + (group ? `<small>${a.nPlan} of ${a.n} planned</small>` : "") : NONE; break;
     case "ac": v = a.ac.n ? (a.ac.approx?"~":"") + money(a.ac.sum) : (ctx.ticket?.tier==="unattributed" ? `<span class="none">n/a</span>` : NONE);
                if (group) v += `<small>${a.ac.n} of ${a.ac.of} costed</small>`; break;
     case "cv": v = a.cvN ? signedMoney(a.cv) + (group ? `<small>over ${a.cvN} ticket${a.cvN>1?"s":""}</small>` : "") : NONE; break;
@@ -567,7 +587,7 @@ function render(keepScroll){
       const key = S.e==null ? `e${l.e}` : `f${l.f}`;
       const ctx = {e:l.e, f:l.f, list:l.list};
       html += `<div class="row group" tabindex="0" data-open="${key}" style="--c:${c}" aria-label="${esc(l.name)}, ${s.n} tickets, ${s.pct}% done. Press Enter to open.">
-        <div class="lab"><div class="c-name"><button class="open-btn" data-open="${key}" tabindex="-1" aria-label="Open ${esc(l.name)}" title="Open"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button><span class="chip"></span><span class="name" title="${esc(l.name)}">${esc(l.name)}</span>
+        <div class="lab"><div class="c-name"><button class="open-btn" data-open="${key}" tabindex="-1" aria-label="Open ${esc(l.name)}" title="Open"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button><span class="chip"></span>${(u => u ? `<a class="name" href="${esc(u)}" target="_blank" rel="noopener" title="Open ${esc(l.name)} on GitHub">${esc(l.name)}</a>` : `<span class="name" title="${esc(l.name)}">${esc(l.name)}</span>`)(issueOf(l.e, S.e==null ? null : l.f))}
           <div class="meta"><span>${s.n} · ${s.pct}%</span><span class="prog"><i style="width:${s.pct}%"></i></span></div></div>
           ${vis.map(k => cell(P, k, a, ctx)).join("")}</div>
         <div class="track" style="width:${W}px">${spanP}${spanA}${marks}${pill}</div></div>`;

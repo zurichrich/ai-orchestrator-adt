@@ -358,7 +358,9 @@ done
 [[ -e "$ADT_DIR/tools/adt_cost.py" ]] && copy "$ADT_DIR/tools/adt_cost.py" "$CLAUDE/tools/adt_cost.py"
 # AO-028: /adt-brief lists the epics with management_report.py and /adt-close
 # stamps devs: with adt_devs.py, both from a project session with no $ADT_DIR.
-for _t in management_report.py management_report_template.html adt_devs.py; do
+# adt_hierarchy.py serves /adt-group and the done-guard's plan gate, and
+# management_report.py imports it.
+for _t in management_report.py management_report_template.html adt_devs.py adt_hierarchy.py; do
   [[ -e "$ADT_DIR/tools/$_t" ]] && copy "$ADT_DIR/tools/$_t" "$CLAUDE/tools/$_t"
 done
 [[ -e "$ADT_DIR/tools/adt_backfill_cost.py" ]] && copy "$ADT_DIR/tools/adt_backfill_cost.py" "$CLAUDE/tools/adt_backfill_cost.py"

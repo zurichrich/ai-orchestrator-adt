@@ -45,6 +45,7 @@ Three caveats, because each one changes how a row should be read:
 | `/adt-plan-fasttrack` | typed=6, playbooks=1 | keep |
 | `/adt-review-critical-path` | typed=3, agent dispatched 3, playbooks=2; `release-check.md` gate 8 requires its verdict before any merge-offer. Was in no lane header — now in ready-to-release | keep |
 | `/adt-decide` | typed=2 understates it: six ADRs (001-006) are cited 116 times across the backlog. Cross-cutting, so no lane owns it — recorded in BOARD_EXEMPT with its reason rather than forced into one | keep |
+| `/adt-group` | new in AO-028: run once after an update from 0.4.0 or earlier, and again when tickets are left ungrouped. Cross-cutting, so recorded in BOARD_EXEMPT | keep |
 | `/adt-review-security` | typed=1, agent dispatched 10 via plan.md and release-check.md | keep |
 | `/adt-block` | typed=1, playbooks=9 — the most-referenced command in the repo; value is availability, not frequency | keep |
 | `/adt-review-designer` | typed=0 but agent dispatched 6 — used from inside playbooks. `ui_review_required: true` forces track:full and needs a manual summon. Was in no lane header — now in qa | keep |

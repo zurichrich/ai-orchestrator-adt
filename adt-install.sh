@@ -577,6 +577,10 @@ if [[ "$DO_GITHUB" == true ]]; then
   python3 "$ADT_DIR/tools/adt_watch.py" --root "$PROJECT_DIR" --once >/dev/null 2>&1 \
     && ok "rendered $cache_dir/kanban.html" \
     || echo "  (render skipped — will render on first 'adt watch' pass)"
+  # AO-028: every ticket belongs to a Feature and an Epic. An update from 0.4.0
+  # or earlier has none, so say how many need grouping. Only /adt-group creates
+  # the Epic and Feature Issues, after the product owner approves the outline.
+  python3 "$ADT_DIR/tools/adt_hierarchy.py" --status "$cache_dir" 2>/dev/null || true
 
   say "▸ Installing the background board-sync watcher…"
   # A watcher MUST exist for every project ADT runs in — without it the board

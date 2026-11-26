@@ -27,7 +27,7 @@ ticket id is the real issue number. If `gh` is unavailable, stop and say so. Do
 not write a ticket with no number.
 
 1. **Ask the user for:** slug (kebab-case; it becomes the filename and branch),
-   **type** (`bug`/`enhancement`/`task`, REQUIRED), problem, success criteria,
+   **type** (`bug`/`enhancement`/`task`/`epic`/`feature`, REQUIRED), problem, success criteria,
    priority (P0/P1/P2), size (XS/S/M/L), whether a UI is involved
    (`ui_review_required`), and whether auth or data exposure is involved
    (`security_review_required`).
@@ -36,16 +36,20 @@ not write a ticket with no number.
    pushes it as the only label that survives a cache rebuild. If it is missing,
    every rebuilt cache files the ticket as a task.
 
-   **Also ask for the epic, the feature and the product owner.** These group the
-   ticket on the management report (`.adt/management-report.html`). First run
-   `python3 .claude/tools/management_report.py --list-groups ~/.adt/<project>/cache`
-   and offer the names it prints, so one epic is not split in two by a different
-   spelling. A new name is fine when the work really is new. A feature belongs to
-   one epic: the same feature name under another epic is a different feature.
-   The product owner is a GitHub handle or a name. When the human gives none,
-   leave it out and the ticket shows its epic's owner.
-   Do not file the ticket until it has an epic and a feature.
-   The done-guard also denies moving a ticket into `planned/` without them.
+   **Also ask for the parent.** Every ticket sits under a Feature ticket, and
+   every Feature under an Epic ticket. The ticket names its Feature with
+   `parent: <ID>`, and a Feature names its Epic the same way. First run
+   `python3 .claude/tools/management_report.py --list-groups ~/.adt/<project>/cache`,
+   which prints each Epic and Feature with its ID and owner, and offer those.
+   Choose the parent by ID, never by retyping a name.
+   Do not file the ticket until it has a parent Feature.
+   When no Feature fits, file the Feature first, as its own ticket with
+   `type: feature` and `parent:` naming its Epic, and the same for a new Epic
+   (`type: epic`, no parent, and a `product_owner:`). An Epic's or Feature's
+   lane follows its children, so it is never moved by hand.
+   The product owner is a GitHub handle or a name. A Feature or ticket with none
+   shows its Epic's owner.
+   The done-guard denies moving a ticket into `planned/` without a parent chain.
 
 2. **Create the Issue first, and claim it on the same call.** The issue number is
    the ticket id. Read `repo` from `.adt/config.yaml`:
@@ -73,7 +77,7 @@ not write a ticket with no number.
    backlog" below.
 
 3. **Write the cache file** at
-   `~/.adt/<project>/cache/<bugs|enhancements|tasks>/ideas/<slug>.md`,
+   `~/.adt/<project>/cache/<bugs|enhancements|tasks|epics|features>/ideas/<slug>.md`,
    stamped `id: <PREFIX>-<num>`, `issue_number: <num>`, `issue_node_id: <node>`.
    The folder is the plural of `type:`, so `type: bug` goes in `bugs/`.
    Never make up a local id. Take it from the number GitHub assigned.
@@ -83,7 +87,7 @@ not write a ticket with no number.
 slug: <slug>
 id: <PREFIX>-<num>
 title: <Feature title>
-type: <bug|enhancement|task>
+type: <bug|enhancement|task|epic|feature>
 created: YYYY-MM-DD
 created_by: po
 stage: ideas
@@ -91,8 +95,7 @@ state: open
 state_reason: null
 priority: <P0|P1|P2>
 size: <XS|S|M|L>
-epic: <epic name>
-feature: <feature name>
+parent: <ID of the Feature; for a Feature, of its Epic; leave out for an Epic>
 product_owner: <GitHub handle or name, or leave the line out>
 assignees: []
 milestone: null
@@ -147,7 +150,7 @@ comments: []
 
 6. **Print:**
 ```
-Filed: <slug>.md in ~/.adt/<project>/cache/<bugs|enhancements|tasks>/ideas/  (sync → GitHub Issue)
+Filed: <slug>.md in ~/.adt/<project>/cache/<bugs|enhancements|tasks|epics|features>/ideas/  (sync → GitHub Issue)
 Type: <type>, Priority: <P>, Size: <S>, UI: <bool>, Security: <bool>
 ```
 

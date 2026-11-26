@@ -587,9 +587,12 @@ Then, once, after the loop converges:
      (`YYYY-MM-DD`) and `planned_cost:` (USD). Leave any they don't give
      absent. Never estimate one yourself: the report shows a missing plan as
      missing, and a made-up one would be read as a real commitment.
-   - **`epic:` and `feature:`** must be set before step 5. If the brief has
-     none, ask for them, offering the names `.claude/tools/management_report.py
-     --list-groups` prints. The done-guard denies the move without them.
+   - **`parent:`** names the ticket's Feature, by ID.
+     `parent:` must name a Feature before step 5.
+     If the brief has none, ask for one, offering the IDs
+     `.claude/tools/management_report.py --list-groups` prints. The Feature's
+     own `parent:` must be an Epic; the done-guard follows the chain and denies
+     the move without it.
    - **`done_evidence:`**: write it here, in the frontmatter, and nowhere else.
      The `### Definition of Done` block in the spec body is generated from this
      list at push time and overwritten on every push, so any hand-edit there is
@@ -604,7 +607,7 @@ Then, once, after the loop converges:
    file is still in `ideas/` is rewritten back to `ideas`, and the next sync
    pushes that.
 
-   If the ticket has no track set, or no `epic:` or `feature:`,
+   If the ticket has no track set, or no parent Feature,
    adt-done-guard.sh denies the move into planned/. Set them in step 4 and move
    it again.
 

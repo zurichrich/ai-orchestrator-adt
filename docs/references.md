@@ -2,7 +2,7 @@
 
 Here's what ai-orchestrator-adt (ADT) ships with, and how each piece works:
 
-**5 loops**, **14 commands**, **6 subagents**, **1 skill**, **18 hooks** (11 wired · 1 template · 6 helpers)
+**5 loops**, **15 commands**, **6 subagents**, **1 skill**, **18 hooks** (11 wired · 1 template · 6 helpers)
 
 The kanban lane headers list only what a human can **invoke** in that lane — the
 slash commands and `/adt-diagnose`. Hooks are not listed there: they fire
@@ -70,6 +70,7 @@ A command tagged **· loop** in its Type cell iterates internally (loop analysis
 | `/adt-block` | command | Pause on a question only the human can answer; move to blocked/, email. | [block](../../agent-dev-team/commands/block.md) |
 | `/adt-unblock` | command | Answer a blocked item, move it back to its prior stage. | [unblock](../../agent-dev-team/commands/unblock.md) |
 | `/adt-decide` | command | Record an ADR in decisions.md (the "re-read in 6 months" test). | [decide](../../agent-dev-team/commands/decide.md) |
+| `/adt-group` | command | Put every ticket under a Feature and an Epic ticket: propose the grouping, show it to the product owner, and create the Epic and Feature Issues on their yes. Safe to re-run and on two machines. | [group](../../agent-dev-team/commands/group.md) |
 | `/adt-review-designer` | command→agent | Hand the UI diff to the `adt-design-reviewer` subagent (fires when the diff has UI surface). | [review-designer](../../agent-dev-team/commands/review-designer.md) |
 | `/adt-review-critical-path` | command→agent | Hand the diff to the `adt-critical-path-reviewer` subagent (money/safety/data path). | [review-critical-path](../../agent-dev-team/commands/review-critical-path.md) |
 
@@ -119,7 +120,7 @@ not a hook at all, a script the playbooks call.
 |---|---|---|---|---|
 | `adt-phrase-linter` | wired | Stop | Parses the last assistant turn; flags banned recovery-narration phrases, an unbacked done-claim about a rendered artifact, an unbacked **pass-claim** (ENFORCED RULE 1 — "the tests pass" with no matching command run this turn), and an unbacked counted or completeness claim ("9 markers, all ok" with nothing in the turn that counts; working-style #13). | no (warn) |
 | `adt-close-complete` | wired | Stop | **Blocks the stop** (exit 2) when a session whose `current-cmd` marker reads `adt-close` ends without the ticket reaching `<cache>/*/done/` with `stage: done` + `state: closed`. Every other close-path gate fires on an ACTION, so an omitted move fired none of them (ADT-336). Bounded to one block per session and fail-open on every unresolvable input. | **yes** (fail-open on infra) |
-| `adt-done-guard` | wired | PreToolUse | **Denies** a `done/` move whose ticket has no `tokens:`/`cost_usd:`/`cost_tier:` stamp (so `/adt-close` did not run; `unattributed` passes), whose `done_evidence` has a condition that ran and FAILED, whose board carries a broken link, or whose rendering checkout is stale; warns otherwise. Also denies a move into planned/ whose ticket has no track of `fast`, `standard` or `full`, so a plan that never set one stops there. A can't-verify condition warns and no longer hides a real failure. | **yes** (fail-open on infra) |
+| `adt-done-guard` | wired | PreToolUse | **Denies** a `done/` move whose ticket has no `tokens:`/`cost_usd:`/`cost_tier:` stamp (so `/adt-close` did not run; `unattributed` passes), whose `done_evidence` has a condition that ran and FAILED, whose board carries a broken link, or whose rendering checkout is stale; warns otherwise. Also denies a move into planned/ whose ticket has no track of `fast`, `standard` or `full`, so a plan that never set one stops there, or whose ticket has no parent Feature (AO-028: a `parent:` chain to a Feature and then an Epic). A can't-verify condition warns and no longer hides a real failure. | **yes** (fail-open on infra) |
 | `adt-deferral-guard` | wired | PreToolUse | **Denies** `gh issue create`, or any gh api call that creates an Issue, unless the transcript carries a human authorisation (ENFORCED RULE 2 — no casual deferral). | **yes** (fail-open on infra) |
 | `adt-test-run-guard` | wired | PreToolUse | **Denies** a FULL-suite run (`pytest` over `tools/tests/ tests/`, a bare `pytest`, `run-shell-suite.sh`) unless the human authorised it in the turn in flight — in their own words or with `adt run tests` (or `adt tests`). A targeted run (`-k`, `::`, a named test file) is never gated: that is the change-triggered check working-style #7 actually wants. | **yes** (fail-open on infra) |
 | `adt-destructive-git-guard` | wired | PreToolUse | **Denies** a git command that would destroy uncommitted work: `reset --hard`, a forced `checkout`/`switch`, a `checkout --`/`restore` of a dirty path, or a `clean -f` that would remove files. It asks git what would be lost, so a targeted restore of a clean path is allowed, and says to commit or `git stash push -u` first. | **yes** (fail-open on infra) |
