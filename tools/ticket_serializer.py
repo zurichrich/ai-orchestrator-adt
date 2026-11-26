@@ -442,7 +442,7 @@ _META_EXCLUDED = frozenset({
     "title", "body", "slug", "state", "state_reason", "milestone", "created",
     "created_by", "comments", "done_evidence", "tags",
     *LABEL_SCALAR_KEYS, *GATE_KEYS, *PULL_OWNED_KEYS,
-    "sync_conflict",
+    "sync_conflict", "sub_issue_refused",
 })
 _META_TRAILER = "<!-- adt:meta %s -->"
 # Same shape rule as _SLUG_TRAILER_RE: only a comment on its OWN line after a
