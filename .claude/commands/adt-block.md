@@ -55,4 +55,4 @@ you would take if no answer came.
 4. **Exit cleanly.** Push any finished commits on the ticket's branch. Never push
    half-finished code.
 
-<!-- adt-bundle: v0.4.0 -->
+<!-- adt-bundle: v0.5.0 -->

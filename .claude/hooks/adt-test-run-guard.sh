@@ -238,4 +238,4 @@ PY
 printf '%s' "$input" | /usr/bin/python3 "$_py" || true
 exit 0
 
-# adt-bundle: v0.4.0
+# adt-bundle: v0.5.0

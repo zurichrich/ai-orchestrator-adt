@@ -155,4 +155,4 @@ if [ -n "$tix" ]; then title="✳ $tix · $topic"; else title="✳ $topic"; fi
 printf '\033]0;%s\007' "$title" > "$TTY" 2>/dev/null || true
 exit 0
 
-# adt-bundle: v0.4.0
+# adt-bundle: v0.5.0

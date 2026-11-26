@@ -312,4 +312,4 @@ paths) locally.
    with no token carries no embedded secret and no hardcoded path, and the
    worktree/branch flow runs against a generic repo.
 
-<!-- adt-bundle: v0.4.0 -->
+<!-- adt-bundle: v0.5.0 -->

@@ -82,4 +82,4 @@ alone.
 Delete `.adt/grouping.md` when you are done. It is a working file and nothing
 reads it later.
 
-<!-- adt-bundle: v0.4.0 -->
+<!-- adt-bundle: v0.5.0 -->
