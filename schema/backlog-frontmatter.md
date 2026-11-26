@@ -11,7 +11,7 @@ mirrors it into a `stage:` field.
 |---|---|---|---|
 | `slug` | yes | kebab-case | filename + branch name |
 | `id` | auto | `<PREFIX>-NNN` (e.g. `a consumer ticket`) | assigned by the generator; never hand-write or reuse |
-| `type` | yes | `bug` \| `enhancement` \| `task` | **authoritative for presentation** — the board buckets the card by this field, not by the folder. The `bugs`/`enhancements`/`tasks` dir is create-time bucketing only (see below). |
+| `type` | yes | `bug` \| `enhancement` \| `task` \| `epic` \| `feature` | **authoritative for presentation** — the board buckets the card by this field, not by the folder. The `bugs`/`enhancements`/`tasks`/`epics`/`features` dir is create-time bucketing only (see below). |
 | `stage` | auto | `ideas` \| `planned` \| `building` \| `qa` \| `ready-to-release` \| `blocked` \| `done` | **derived mirror of the folder**, written/validated by the generator (see below). Don't hand-edit — move the file instead. |
 | `priority` | yes | `P0` \| `P1` \| `P2` \| `P3` | |
 | `size` | yes | `XS` \| `S` \| `M` \| `L` | |
@@ -29,9 +29,11 @@ mirrors it into a `stage:` field.
 | `tokens` | no | integer \| `unattributed` | cost-of-work stamped at `/adt-close` from `adt-token-total.sh` — the cross-machine sum (the cost-of-work work). `unattributed` = never captured; never coerce to `0` |
 | `cost_usd` | no | number \| `unattributed` | the same work in money, stamped at `/adt-close` from `adt-token-total.sh --cost` (ADT-115). Anthropic list rates, priced per ledger row at that row's own model **and** speed. **Not necessarily complete:** the ledger recorded only the main session until 2026-09-06, so for work closed before then this excludes subagent spend entirely — read `cost_tier` before quoting the number (ADT-247). `unattributed` = never captured; never coerce to `0` |
 | `cost_tier` | no | `measured` \| `estimated` \| `legacy` \| `unattributed` | how `cost_usd` was arrived at (ADT-115). Anything other than `measured` renders with a `~` prefix on the board. Never inferred from the value — it travels with it |
-| `epic` | yes, to plan | free text | AO-028: the larger piece of work the ticket belongs to. Asked at `/adt-brief`, offering the names `tools/management_report.py --list-groups <cache>` prints. The done-guard denies a move into `planned/` without it. |
-| `feature` | yes, to plan | free text | AO-028: the feature inside the epic. A feature is the pair (`epic`, `feature`), so one name under two epics is two features. Required to plan, like `epic`. |
-| `product_owner` | no | GitHub handle or a name | AO-028: who owns the work. An epic's owner is the most common value among its tickets (a tie goes to the earliest-created ticket); a feature shows its epic's owner unless its own tickets name a different one. |
+| `parent` | yes, to plan (not on an Epic) | a ticket ID | AO-028: the Feature ticket this ticket belongs to; on a Feature, its Epic ticket. An Epic has none. The done-guard denies a move into `planned/` unless the chain reaches a Feature whose own `parent` is an Epic. The push mirrors it to a GitHub sub-issue link. Chosen by ID from `tools/management_report.py --list-groups <cache>`. |
+| `product_owner` | no | GitHub handle or a name | AO-028: who owns the work. Set on an Epic ticket; a Feature shows its Epic's owner unless it names its own. |
+| `sub_issue_refused` | no (written by the sync) | text | AO-028: GitHub refused the sub-issue link for this ticket's `parent`, with the reason. Local only. `management_report.py --check-assigned` names it. |
+| `epic` | no (phase 1, read once) | free text | AO-028 phase 1 grouped tickets by this name. `/adt-group` reads it to propose the Epic tickets, and removes it as it sets `parent`. Nothing else reads it. |
+| `feature` | no (phase 1, read once) | free text | The phase 1 feature name, read and removed by `/adt-group` the same way as `epic`. |
 | `devs` | no | comma-separated GitHub handles | AO-028: who wrote the linked commits, stamped at `/adt-close` by `tools/adt_devs.py`. An empty `devs:` means checked, with no commit resolving to a GitHub login. Never guessed from a git author name. |
 | `planned_start` | no | `YYYY-MM-DD` | AO-028: asked at `/adt-plan`; absent when no plan was given. Shown as Plan start. |
 | `planned_finish` | no | `YYYY-MM-DD` | AO-028: as `planned_start`. Shown as Plan finish; the finish slip is measured against it. |

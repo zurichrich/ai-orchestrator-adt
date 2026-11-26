@@ -311,21 +311,27 @@ out="$(run_close)"
 rm -rf "$REPO_O" "$REPO_R" "$REPO_R2" "$LA" "$LA_EMPTY" 2>/dev/null || true
 rm -rf "$G" 2>/dev/null || true
 
-# AO-028: the plan gate also needs an epic and a feature, on every planning path.
-PG="$(mktemp -d)"; mkdir -p "$PG/ideas" "$PG/planned"
-printf -- '---\nslug: nogroup\ntrack: fast\n---\n' > "$PG/ideas/nogroup.md"
-printf -- '---\nslug: noepic\ntrack: full\nfeature: Search\n---\n' > "$PG/ideas/noepic.md"
-printf -- '---\nslug: blank\ntrack: standard\nepic:\nfeature: null\n---\n' > "$PG/ideas/blank.md"
-printf -- '---\nslug: grouped\ntrack: fast\nepic: Billing\nfeature: "Invoices"\n---\n' > "$PG/ideas/grouped.md"
+# AO-028: the plan gate also needs a parent Feature whose own parent is an
+# Epic, in the same cache, on every planning path.
+PG="$(mktemp -d)"; mkdir -p "$PG/epics/ideas" "$PG/features/ideas" "$PG/tasks/ideas" "$PG/tasks/planned"
+printf -- '---\nid: T-1\ntype: epic\n---\n' > "$PG/epics/ideas/e.md"
+printf -- '---\nid: T-2\ntype: feature\nparent: T-1\n---\n' > "$PG/features/ideas/f.md"
+printf -- '---\nid: T-3\ntype: feature\n---\n' > "$PG/features/ideas/lonely.md"
+printf -- '---\nid: T-9\ntype: task\ntrack: fast\n---\n' > "$PG/tasks/ideas/plain.md"
+printf -- '---\nid: T-10\nslug: nogroup\ntrack: fast\n---\n' > "$PG/tasks/ideas/nogroup.md"
+printf -- '---\nid: T-11\ntrack: full\nparent: T-9\n---\n' > "$PG/tasks/ideas/notfeature.md"
+printf -- '---\nid: T-12\ntrack: standard\nparent: T-3\n---\n' > "$PG/tasks/ideas/noepic.md"
+printf -- '---\nid: T-13\ntrack: standard\nparent: T-99\n---\n' > "$PG/tasks/ideas/missing.md"
+printf -- '---\nid: T-14\ntrack: fast\nparent: "t-02"\n---\n' > "$PG/tasks/ideas/grouped.md"
 pg_fails=0
-for t in nogroup noepic blank; do
-  out="$(run_cwd "mv $PG/ideas/$t.md $PG/planned/$t.md" "$PG")"
-  { is_deny "$out" && printf '%s' "$out" | grep -q 'list-groups'; } \
-    || { bad "plan gate: $t must be denied naming --list-groups, got: $out"; pg_fails=1; }
+for t in nogroup notfeature noepic missing; do
+  out="$(run_cwd "mv $PG/tasks/ideas/$t.md $PG/tasks/planned/$t.md" "$PG")"
+  { is_deny "$out" && printf '%s' "$out" | grep -q 'no parent Feature' && printf '%s' "$out" | grep -q 'list-groups'; } \
+    || { bad "plan gate: $t must be denied naming the parent Feature and --list-groups, got: $out"; pg_fails=1; }
 done
-out="$(run_cwd "mv $PG/ideas/grouped.md $PG/planned/grouped.md" "$PG")"
-[ -z "$out" ] || { bad "plan gate: a ticket with a track, epic and feature must pass silently, got: $out"; pg_fails=1; }
-[ "$pg_fails" -eq 0 ] && ok "plan gate denies a ticket with no epic or feature"
+out="$(run_cwd "mv $PG/tasks/ideas/grouped.md $PG/tasks/planned/grouped.md" "$PG")"
+[ -z "$out" ] || { bad "plan gate: a ticket with a track and a parent chain must pass silently, got: $out"; pg_fails=1; }
+[ "$pg_fails" -eq 0 ] && ok "plan gate denies a ticket whose parent is not a feature"
 rm -rf "$PG"
 
 # Cleanup

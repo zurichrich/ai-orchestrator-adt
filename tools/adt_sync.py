@@ -24,6 +24,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -954,15 +955,69 @@ def _conflict_check(path, data, cfg, current, issue, sync):
     return None
 
 
+def _parent_key(v) -> str:
+    """A `parent:` or `id:` value as the canonical ticket id (canon_tix)."""
+    return _canon_tix(str(v or "").strip().strip("'\""))
+
+
+def _mirror_parent(repo: str, path: str, data: dict, parents: dict | None,
+                   child_id=None) -> str | None:
+    """AO-028: make the ticket's `parent:` a native GitHub sub-issue link.
+
+    `parents` maps a canonical ticket id to its cache data, so a parent created
+    earlier in this pass already carries its number. Reads the child's current
+    parent (404 means none) and posts only when it differs, with
+    replace_parent so a moved ticket leaves its old parent. A 422 is GitHub
+    refusing the link itself; it is written to `sub_issue_refused:` so the push
+    hash keeps it from being retried every tick. Any other failure raises and
+    the caller retries next tick. Returns "linked", "refused" or None."""
+    if parents is None or not data.get("parent"):
+        return None
+    parent = parents.get(_parent_key(data.get("parent")))
+    pnum, num = (parent or {}).get("issue_number"), data.get("issue_number")
+    if not pnum or not num:
+        return None
+    try:
+        have = (_gh_json(["api", f"repos/{repo}/issues/{num}/parent"]) or {}).get("number")
+    except RateLimitError:
+        raise
+    except GhError as e:
+        if "404" not in str(e) and "Not Found" not in str(e):
+            raise
+        have = None
+    result = None
+    if have != int(pnum):
+        if child_id is None:
+            child_id = (_gh_json(["api", f"repos/{repo}/issues/{num}"]) or {}).get("id")
+        try:
+            _gh(["api", "-X", "POST", f"repos/{repo}/issues/{pnum}/sub_issues",
+                 "-F", f"sub_issue_id={child_id}", "-F", "replace_parent=true"])
+            result = "linked"
+        except RateLimitError:
+            raise
+        except GhError as e:
+            if "422" not in str(e):
+                raise
+            data["sub_issue_refused"] = str(e).rsplit("failed: ", 1)[-1][:200]
+            _write_back(path, data)
+            return "refused"
+    if data.pop("sub_issue_refused", None) is not None:
+        _write_back(path, data)
+    return result
+
+
 def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False,
-                  sync: dict | None = None) -> dict:
+                  sync: dict | None = None, parents: dict | None = None) -> dict:
     """Reconcile a single cache .md to its Issue. Returns an action summary.
     Writes issue_number/issue_node_id back into the .md when an Issue is
     created. Idempotent: a converged ticket produces {'action': 'noop'}.
 
     `sync` carries the AO-027 baselines and conflicts (see _conflict_check).
     Without it the push behaves as it did before AO-027, which is what a
-    caller with no sidecar (the ordered migration) needs."""
+    caller with no sidecar (the ordered migration) needs.
+
+    `parents` (id -> cache data) turns on the AO-028 sub-issue mirror for a
+    ticket with a `parent:`; without it no link is written."""
     repo = cfg["repo"]
     issue = to_issue(data)
     # A title is mandatory for `gh issue create/edit` — never pass None. Fall
@@ -1018,6 +1073,8 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False,
                 issue["title"], issue.get("body", "") or "(no body)")
         actions["action"] = "created"
         actions["number"] = new_number
+        actions["mirror"] = _mirror_parent(repo, path, data, parents,
+                                           (node or {}).get("id"))
         # A fresh Issue got its stage label at creation — same lifecycle
         # event as a stage push for the token checkpoint (ADT-100).
         actions["stage_label_changed"] = True
@@ -1106,6 +1163,11 @@ def reconcile_one(path: str, data: dict, cfg: dict, dry_run: bool = False,
     board = ensure_on_board(cfg, int(number), data.get("stage") or "ideas")
     if board:
         changed.append(f"board:{board}")
+
+    mirror = _mirror_parent(repo, path, data, parents, current.get("databaseId"))
+    if mirror:
+        actions["mirror"] = mirror
+        changed.append(f"sub-issue:{mirror}")
 
     actions["action"] = "updated" if changed else "noop"
     actions["changes"] = changed
@@ -1624,7 +1686,7 @@ def _cache_path_for(cfg: dict, data: dict) -> str:
     # remedy). The caller now counts the no-type adoptions and prints one
     # summary line for the pull; this stays a pure path helper.
     typ = (data.get("type") or "tasks")
-    typ = typ + "s" if typ in ("bug", "enhancement", "task") else typ
+    typ = typ + "s" if typ in ("bug", "enhancement", "task", "epic", "feature") else typ
     stage = data.get("stage") or "ideas"
     slug = data.get("slug") or f"issue-{data.get('issue_number')}"
     return os.path.join(base, typ, stage, f"{slug}.md")
@@ -1844,6 +1906,8 @@ def _issue_from_rest(item: dict) -> dict:
     return {
         "number": item.get("number"),
         "id": item.get("node_id"),
+        # AO-028: the sub-issue API takes the numeric id, not the node id.
+        "databaseId": item.get("id"),
         "title": item.get("title"),
         "body": item.get("body") or "",
         "state": item.get("state"),
@@ -2225,6 +2289,12 @@ def reconcile_all(project_root: str, dry_run: bool = False,
     # and a stale stub that says `state: open` reopens a closed Issue and moves
     # its card back. Push neither and name both, so a human picks the real one.
     files = list(iter_cache_files(cfg))
+    # AO-028: parents push first, so an Epic or Feature created this pass has a
+    # number before its children link to it. The sort is stable.
+    rank = {"epic": 0, "feature": 1}
+    kind = lambda d: str(d.get("type") or "").lower()  # noqa: E731
+    files.sort(key=lambda f: rank.get(kind(f[1]), 2))
+    parents = {_parent_key(d.get("id")): d for _, d in files if kind(d) in rank}
     per_number = collections.Counter(int(d["issue_number"]) for _, d in files
                                      if d.get("issue_number"))
 
@@ -2242,7 +2312,8 @@ def reconcile_all(project_root: str, dry_run: bool = False,
                             "action": "noop"})
             continue
         try:
-            r = reconcile_one(path, data, cfg, dry_run=dry_run, sync=sync)
+            r = reconcile_one(path, data, cfg, dry_run=dry_run, sync=sync,
+                              parents=parents)
             results.append(r)
             # Record the POST-reconcile hash by RE-PARSING the file:
             # reconcile_one may have written issue_number back, and that field

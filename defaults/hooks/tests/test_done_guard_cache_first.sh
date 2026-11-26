@@ -78,10 +78,14 @@ done
 
 # ADT-371: a move into planned/ needs a track. Checked on both copies; the ok
 # lines are printed once, after both copies have passed.
-mkdir -p "$TMP/home/.adt/cache/ideas" "$TMP/home/.adt/cache/planned"
-printf -- '---\nslug: notrack\n---\n' > "$TMP/home/.adt/cache/ideas/notrack.md"
-printf -- '---\nslug: fasttrack\ntrack: fast\nepic: E\nfeature: F\n---\n' > "$TMP/home/.adt/cache/ideas/fasttrack.md"
-printf -- '---\nslug: quoted\ntrack: "standard"\nepic: E\nfeature: F\n---\n' > "$TMP/home/.adt/cache/ideas/quoted.md"
+# AO-028: a planned/ move also needs a parent chain, so the cache holds one.
+C="$TMP/home/.adt/cache"
+mkdir -p "$C/tasks/ideas" "$C/tasks/planned" "$C/epics/ideas" "$C/features/ideas"
+printf -- '---\nid: T-1\ntype: epic\n---\n' > "$C/epics/ideas/e.md"
+printf -- '---\nid: T-2\ntype: feature\nparent: T-1\n---\n' > "$C/features/ideas/f.md"
+printf -- '---\nslug: notrack\nparent: T-2\n---\n' > "$C/tasks/ideas/notrack.md"
+printf -- '---\nslug: fasttrack\ntrack: fast\nparent: T-2\n---\n' > "$C/tasks/ideas/fasttrack.md"
+printf -- '---\nslug: quoted\ntrack: "standard"\nparent: T-2\n---\n' > "$C/tasks/ideas/quoted.md"
 plan_move() {  # $1=hook $2=command -> prints the hook's output
   printf '{"tool_name":"Bash","tool_input":{"command":"%s"},"cwd":"%s"}' "$2" "$PROJ" \
     | HOME="$TMP/home" bash "$1" 2>/dev/null
@@ -89,13 +93,13 @@ plan_move() {  # $1=hook $2=command -> prints the hook's output
 plan_fails=0
 for hook in "$ROOT/defaults/hooks/adt-done-guard.sh" "$ROOT/.claude/hooks/adt-done-guard.sh"; do
   name="${hook#$ROOT/}"
-  out="$(plan_move "$hook" "mv $TMP/home/.adt/cache/ideas/notrack.md $TMP/home/.adt/cache/planned/notrack.md")"
+  out="$(plan_move "$hook" "mv $TMP/home/.adt/cache/tasks/ideas/notrack.md $TMP/home/.adt/cache/tasks/planned/notrack.md")"
   case "$out" in *'"deny"'*"no track"*) ;; *) bad "$name: a move into planned/ with no track must be denied"; plan_fails=1 ;; esac
-  out="$(plan_move "$hook" "mv ~/.adt/cache/ideas/notrack.md ~/.adt/cache/planned/notrack.md")"
+  out="$(plan_move "$hook" "mv ~/.adt/cache/tasks/ideas/notrack.md ~/.adt/cache/tasks/planned/notrack.md")"
   case "$out" in *'"deny"'*"no track"*) ;; *) bad "$name: a ~ path into planned/ with no track must be denied"; plan_fails=1 ;; esac
-  out="$(plan_move "$hook" "mv $TMP/home/.adt/cache/ideas/fasttrack.md $TMP/home/.adt/cache/planned/fasttrack.md")"
+  out="$(plan_move "$hook" "mv $TMP/home/.adt/cache/tasks/ideas/fasttrack.md $TMP/home/.adt/cache/tasks/planned/fasttrack.md")"
   [ -z "$out" ] || { bad "$name: a move into planned/ with track: fast must be allowed silently, got: $out"; plan_fails=1; }
-  out="$(plan_move "$hook" "mv $TMP/home/.adt/cache/ideas/quoted.md $TMP/home/.adt/cache/planned/quoted.md")"
+  out="$(plan_move "$hook" "mv $TMP/home/.adt/cache/tasks/ideas/quoted.md $TMP/home/.adt/cache/tasks/planned/quoted.md")"
   [ -z "$out" ] || { bad "$name: a quoted track (\"standard\") is a track, like everywhere else ADT reads one, got: $out"; plan_fails=1; }
 done
 if [ "$plan_fails" -eq 0 ]; then

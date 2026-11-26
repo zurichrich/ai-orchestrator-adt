@@ -9,20 +9,23 @@ writes the page beside kanban.html; adt_watch copies it into the project's
 .adt/. The page is self-contained and loads nothing from the network, because
 it is opened from disk, often offline.
 
-Each ticket's group comes from its own frontmatter (`epic:`, `feature:`), so
-there is no registry of epics. A feature is the pair (epic, feature name): the
-same name under two epics is two features. A ticket missing either field goes
-under "Unassigned".
+Epics and Features are tickets of `type: epic` and `type: feature`. A ticket
+names its Feature with `parent: <ID>` and a Feature names its Epic the same way
+(adt_hierarchy.py). Each Epic and Feature row is titled by its ticket's title,
+and holds the tickets whose chain resolves to it; a ticket whose chain does not
+resolve goes under "Unassigned". Epic and Feature tickets are rows, never
+counted as tickets.
 
-Owners are derived from the tickets. An epic's product owner is the most
-common `product_owner:` among its tickets, a tie going to the value on the
-earliest-created ticket. A feature's is the same over its own tickets; when it
-has none, or it equals the epic's, it is shown as inherited.
+An Epic's owner is its own `product_owner:`. A Feature shows its own, or its
+Epic's marked inherited. An Epic or Feature with its own plan dates or budget
+is measured against them, and the children's roll-up is kept beside it as
+`kids` so the page can show both.
 
 CLI, against a backlog cache directory:
-  --list-groups <cache>     print each epic, its owner and its features
-  --check-assigned <cache>  exit 1 if a ticket has no epic or feature, or an
-                            epic has no product owner
+  --list-groups <cache>     print each Epic and Feature with its ID and owner
+  --check-assigned <cache>  exit 1 if a ticket is not under a Feature and an
+                            Epic, a Feature has no Epic, an Epic has no product
+                            owner, or GitHub refused a sub-issue link
 """
 
 from __future__ import annotations
@@ -30,9 +33,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import Counter
 from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from adt_hierarchy import LANES, PARENT_TYPES, _field, canon  # noqa: E402
 
 UNASSIGNED = "Unassigned"
 _TEMPLATE = Path(__file__).with_name("management_report_template.html")
@@ -56,11 +61,6 @@ def _money(value) -> float | None:
         return None
 
 
-def _field(fm: dict, key: str) -> str:
-    v = str(fm.get(key) or "").strip().strip("'\"")
-    return "" if v.lower() in ("null", "none", "~") else v
-
-
 def ticket_row(item, built: str) -> dict:
     """One ticket's fields, read from the board's Item."""
     fm = item.fm
@@ -68,9 +68,10 @@ def ticket_row(item, built: str) -> dict:
     return {
         "id": item.id or item.slug,
         "title": item.title,
-        "epic": _field(fm, "epic") or UNASSIGNED,
-        "feature": _field(fm, "feature") or UNASSIGNED,
-        "assigned": bool(_field(fm, "epic") and _field(fm, "feature")),
+        "kind": _field(fm, "type").lower(),
+        "parent": canon(_field(fm, "parent")),
+        "number": _field(fm, "issue_number") or None,
+        "refused": _field(fm, "sub_issue_refused"),
         "stage": item.status,
         "priority": item.priority,
         "type": _field(fm, "type"),
@@ -85,19 +86,6 @@ def ticket_row(item, built: str) -> dict:
         "planned_finish": _day(fm.get("planned_finish")),
         "planned_cost": _money(fm.get("planned_cost")),
     }
-
-
-def _owner(rows: list[dict]) -> str | None:
-    """Most common owner over rows; a tie goes to the earliest-created ticket's."""
-    counts = Counter(r["owner"] for r in rows if r["owner"])
-    if not counts:
-        return None
-    top = max(counts.values())
-    tied = {o for o, n in counts.items() if n == top}
-    for r in sorted(rows, key=lambda r: (r["start"], r["id"])):
-        if r["owner"] in tied:
-            return r["owner"]
-    return None
 
 
 def _days(a: str, b: str) -> int:
@@ -142,53 +130,102 @@ def rollup(rows: list[dict], today: str) -> dict:
     return out
 
 
-def build(items, project: str = "", today: str | None = None) -> dict:
+def build(items, project: str = "", today: str | None = None, issues_url: str = "") -> dict:
     """The page's data: epics, features, owners, ticket rows and roll-ups."""
     today = today or date.today().isoformat()
-    return assemble([ticket_row(it, today) for it in items], project, today)
+    return assemble([ticket_row(it, today) for it in items], project, today, issues_url)
 
 
-def assemble(rows: list[dict], project: str, today: str) -> dict:
+def _own_plan(r: dict, parent: dict | None, today: str) -> dict:
+    """A roll-up measured against an Epic's or Feature's own plan when it has
+    one. The children's plan is kept as `kids` for the page to show beside it."""
+    if not parent or not (parent["planned_start"] or parent["planned_finish"]
+                          or parent["planned_cost"] is not None):
+        return r
+    r = dict(r, kids={"ps": r["ps"], "pf": r["pf"], "pc": r["pc"], "nPlan": r["nPlan"]})
+    if parent["planned_start"]:
+        r["ps"] = parent["planned_start"]
+    if parent["planned_finish"]:
+        r["pf"], r["slip"], r["slipOpen"] = parent["planned_finish"], None, False
+        if r["allDone"]:
+            r["slip"] = _days(r["af"], r["pf"])
+        elif today > r["pf"]:
+            r["slip"], r["slipOpen"] = _days(today, r["pf"]), True
+    if parent["planned_cost"] is not None:
+        r["pc"] = parent["planned_cost"]
+        r["cv"], r["cvN"] = round(r["ac"]["sum"] - r["pc"], 4), r["ac"]["n"]
+    return r
+
+
+def assemble(rows: list[dict], project: str, today: str, issues_url: str = "") -> dict:
     """build() over rows already read, so the CLI reads each ticket once."""
-    by_epic: dict[str, list[dict]] = {}
-    by_feature: dict[str, dict[str, list[dict]]] = {}
-    last = lambda name: (name == UNASSIGNED, name.lower())  # noqa: E731
-    for r in sorted(rows, key=lambda r: (last(r["epic"]), last(r["feature"]))):
-        by_epic.setdefault(r["epic"], []).append(r)
-        by_feature.setdefault(r["epic"], {}).setdefault(r["feature"], []).append(r)
-    epics = list(by_epic)
-    features = [list(by_feature[e]) for e in epics]
-    index = {(e, f): (i, j) for i, e in enumerate(epics)
-             for j, f in enumerate(features[i])}
+    by_id = {canon(r["id"]): r for r in rows}
+    epic_rows = sorted((r for r in rows if r["kind"] == "epic"), key=lambda r: r["title"].lower())
+    feat_rows = sorted((r for r in rows if r["kind"] == "feature"), key=lambda r: r["title"].lower())
+    tickets_ = [r for r in rows if r["kind"] not in PARENT_TYPES]
 
-    epic_po = [_owner(by_epic[e]) for e in epics]
+    epics = [r["title"] for r in epic_rows]
+    epic_of = {canon(r["id"]): i for i, r in enumerate(epic_rows)}
+    features = [[] for _ in epics]
+    feat_tickets: list = [[] for _ in epics]
+    index = {}
+    for f in feat_rows:
+        i = epic_of.get(f["parent"])
+        if i is None:
+            continue            # a Feature with no Epic is an orphan: its tickets are Unassigned
+        index[canon(f["id"])] = (i, len(features[i]))
+        features[i].append(f)
+        feat_tickets[i].append([])
+
+    placed = []
+    unassigned = []
+    for r in tickets_:
+        at = index.get(r["parent"])
+        if at is None:
+            unassigned.append(r)
+        else:
+            feat_tickets[at[0]][at[1]].append(r)
+            placed.append((r, at))
+    if unassigned:
+        epics.append(UNASSIGNED)
+        epic_rows.append(None)
+        features.append([None])
+        feat_tickets.append([unassigned])
+        u = (len(epics) - 1, 0)
+        placed += [(r, u) for r in unassigned]
+
+    epic_po = [e["owner"] if e else None for e in epic_rows]
     feat_po = []
-    rollups = {"all": rollup(rows, today)}
-    for i, e in enumerate(epics):
-        rollups[f"e{i}"] = rollup(by_epic[e], today)
+    rollups = {"all": rollup(tickets_, today)}
+    for i, e in enumerate(epic_rows):
+        members = [r for fl in feat_tickets[i] for r in fl]
+        rollups[f"e{i}"] = _own_plan(rollup(members, today), e, today)
         owners = []
         for j, f in enumerate(features[i]):
-            members = by_feature[e][f]
-            rollups[f"e{i}-f{j}"] = rollup(members, today)
-            own = _owner(members)
+            rollups[f"e{i}-f{j}"] = _own_plan(rollup(feat_tickets[i][j], today), f, today)
+            own = f["owner"] if f else None
             owners.append([own or epic_po[i], own is None or own == epic_po[i]])
         feat_po.append(owners)
 
-    tickets = [[r["id"], r["title"], *index[(r["epic"], r["feature"])],
+    tickets = [[r["id"], r["title"], *at,
                 r["stage"], r["priority"], r["type"], r["start"], r["finish"],
                 r["size"], r["cost"], r["tier"], r["devs"],
                 r["planned_start"], r["planned_finish"], r["planned_cost"]]
-               for r in rows]
+               for r, at in placed]
+    num = lambda r: int(r["number"]) if r and str(r["number"] or "").isdigit() else None  # noqa: E731
     return {
         "name": project or "Project",
         "built": today,
         "epics": epics,
-        "features": features,
+        "features": [[f["title"] if f else UNASSIGNED for f in fl] for fl in features],
         "epicPO": epic_po,
         "featPO": feat_po,
+        "epicIssues": [num(e) for e in epic_rows],
+        "featIssues": [[num(f) for f in fl] for fl in features],
+        "issuesUrl": issues_url,
         "rollups": rollups,
         "tickets": tickets,
-        "unassigned": sum(1 for r in rows if not r["assigned"]),
+        "unassigned": len(unassigned),
     }
 
 
@@ -199,9 +236,9 @@ def _embed(data: dict) -> str:
             .replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
 
 
-def render(items, project: str = "", today: str | None = None) -> str:
+def render(items, project: str = "", today: str | None = None, issues_url: str = "") -> str:
     """The management report page for a list of build_kanban Items."""
-    data = build(items, project, today)
+    data = build(items, project, today, issues_url)
     title = (data["name"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
     return (_TEMPLATE.read_text(encoding="utf-8")
             .replace("__TITLE__", title)
@@ -210,7 +247,6 @@ def render(items, project: str = "", today: str | None = None) -> str:
 
 # ── CLI ───────────────────────────────────────────────────────────────
 
-_LANES = ("ideas", "planned", "building", "qa", "blocked", "ready-to-release", "done")
 
 
 class _Ticket:
@@ -228,8 +264,8 @@ class _Ticket:
         self.fm = {k: v for k, v in data.items() if v is not None}
         self.slug = _field(self.fm, "slug") or path.stem
         self.id = _field(self.fm, "id").upper()
-        self.title = next((ln[2:].strip() for ln in body.splitlines()
-                           if ln.startswith("# ")), self.slug)
+        self.title = _field(self.fm, "title") or next(
+            (ln[2:].strip() for ln in body.splitlines() if ln.startswith("# ")), self.slug)
         self.status = path.parent.name
         self.priority = _field(self.fm, "priority").upper()
         self.size = _field(self.fm, "size").upper()
@@ -239,15 +275,24 @@ class _Ticket:
 
 def _load(cache: str):
     return [_Ticket(p) for p in sorted(Path(cache).glob("*/*/*.md"))
-            if p.parent.name in _LANES]
+            if p.parent.name in LANES]
 
 
 def problems(rows: list[dict], data: dict) -> list[str]:
-    """Every ticket with no epic or feature, and every epic with no owner."""
-    out = [f"{r['id']}: no epic or feature" for r in rows if not r["assigned"]]
+    """Every ticket not in a Feature and Epic, every Feature with no Epic,
+    every Epic with no owner, and every sub-issue link GitHub refused."""
+    placed = {canon(t[0]) for t in data["tickets"]
+              if data["epics"][t[2]] != UNASSIGNED}
+    epics = {canon(r["id"]) for r in rows if r["kind"] == "epic"}
+    out = [f"{r['id']}: not in a Feature and an Epic" for r in rows
+           if r["kind"] not in PARENT_TYPES and canon(r["id"]) not in placed]
+    out += [f"{r['id']}: Feature with no Epic" for r in rows
+            if r["kind"] == "feature" and r["parent"] not in epics]
     out += [f"epic '{name}': no product owner"
             for name, po in zip(data["epics"], data["epicPO"])
             if name != UNASSIGNED and not po]
+    out += [f"{r['id']}: GitHub refused its sub-issue link ({r['refused']})"
+            for r in rows if r["refused"]]
     return out
 
 
@@ -266,11 +311,14 @@ def main(argv=None) -> int:
     rows = [ticket_row(it, today) for it in items]
     data = assemble(rows, "", today)
     if a.list_groups:
+        ids = {r["number"]: r["id"] for r in rows if r["number"]}
+        tag = lambda n: (ids.get(str(n)) or "") + " " if n else ""  # noqa: E731
         for e, name in enumerate(data["epics"]):
-            print(f"{name}  (owner: {data['epicPO'][e] or '-'})")
+            print(f"{tag(data['epicIssues'][e])}{name}  (owner: {data['epicPO'][e] or '-'})")
             for f, feat in enumerate(data["features"][e]):
                 po, inh = data["featPO"][e][f]
-                print(f"  {feat}  (owner: {po or '-'}{', inherited' if inh and po else ''})")
+                print(f"  {tag(data['featIssues'][e][f])}{feat}  "
+                      f"(owner: {po or '-'}{', inherited' if inh and po else ''})")
         return 0
     found = problems(rows, data)
     for p in found:
@@ -278,7 +326,7 @@ def main(argv=None) -> int:
     if found:
         print(f"{len(found)} problem(s)", file=sys.stderr)
         return 1
-    print(f"all {len(items)} tickets have an epic and a feature, and every epic has an owner")
+    print(f"all {len(items)} tickets are in a Feature and an Epic, and every Epic has an owner")
     return 0
 
 

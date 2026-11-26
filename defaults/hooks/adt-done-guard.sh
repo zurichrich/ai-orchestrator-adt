@@ -338,8 +338,9 @@ PY
     ;;
   *mv*/planned/*)
     # The plan gate. Silent unless the moved ticket has no valid track, or no
-    # epic or feature (AO-028: every ticket is grouped on the management report,
-    # and this is the gate every planning path passes). The track is read by
+    # parent Feature (AO-028: every ticket sits under a Feature ticket whose
+    # parent is an Epic ticket, and this is the gate every planning path
+    # passes; adt_hierarchy.resolve_path follows the chain in the same cache). The track is read by
     # adt_dod.ticket_track(), the reader the plan-quality gate uses, so a quoted
     # `track: "fast"` counts here too. Anything it cannot read is allowed, like
     # the gates above.
@@ -362,9 +363,9 @@ def deny(why):
     sys.exit(0)
 if adt_dod.ticket_track(md) not in ("fast", "standard", "full"):
     deny("done-guard: plan gate - the ticket has no track. Set track: to fast, standard or full (/adt-plan step 4), then move it into planned/.")
-missing = [k for k in ("epic", "feature") if not adt_dod.ticket_field(md, k)]
-if missing:
-    deny("done-guard: plan gate - the ticket has no " + " or ".join(missing) + ". Set epic: and feature: (the existing names: python3 .claude/tools/management_report.py --list-groups <cache>), then move it into planned/.")
+import adt_hierarchy
+if not adt_hierarchy.resolve_path(md):
+    deny("done-guard: plan gate - the ticket has no parent Feature. Set parent: to a Feature ticket whose own parent: is an Epic (the IDs: python3 .claude/tools/management_report.py --list-groups <cache>), then move it into planned/.")
 ' 2>/dev/null || true
     ;;
 esac
