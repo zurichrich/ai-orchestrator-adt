@@ -1624,7 +1624,7 @@ def _cache_path_for(cfg: dict, data: dict) -> str:
     # remedy). The caller now counts the no-type adoptions and prints one
     # summary line for the pull; this stays a pure path helper.
     typ = (data.get("type") or "tasks")
-    typ = typ + "s" if typ in ("bug", "enhancement", "task") else typ
+    typ = typ + "s" if typ in ("bug", "enhancement", "task", "epic", "feature") else typ
     stage = data.get("stage") or "ideas"
     slug = data.get("slug") or f"issue-{data.get('issue_number')}"
     return os.path.join(base, typ, stage, f"{slug}.md")

@@ -774,7 +774,8 @@ def from_issue(issue: dict, base: dict | None = None) -> dict:
             out["track"] = n.split(":", 1)[1]
         elif n.startswith("stage:"):
             out["stage"] = n.split(":", 1)[1]
-        elif n in ("type:bug", "type:enhancement", "type:task"):
+        elif n in ("type:bug", "type:enhancement", "type:task", "type:epic",
+                   "type:feature"):
             # ADT-73: recover the issue type from its label. Without this branch
             # a `type:bug` label fell through to `tags`, leaving out["type"]
             # unset — so a pulled/reconstructed Issue lost its type and
