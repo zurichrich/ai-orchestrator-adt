@@ -94,4 +94,4 @@ print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
 ' 2>/dev/null || true
 exit 0
 
-# adt-bundle: v0.4.0
+# adt-bundle: v0.5.0

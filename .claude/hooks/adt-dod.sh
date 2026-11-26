@@ -27,4 +27,4 @@ fi
 
 exec python3 "$_dod" "$@"
 
-# adt-bundle: v0.4.0
+# adt-bundle: v0.5.0

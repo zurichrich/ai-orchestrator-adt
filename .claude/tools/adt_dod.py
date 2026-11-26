@@ -2088,4 +2088,4 @@ if __name__ == "__main__":
     import sys
     sys.exit(_cli(sys.argv[1:]))
 
-# adt-bundle: v0.4.0
+# adt-bundle: v0.5.0

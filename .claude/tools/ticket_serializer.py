@@ -808,4 +808,4 @@ if __name__ == "__main__":
     text = sys.stdin.read()
     print(json.dumps(to_issue(parse_md(text)), indent=2))
 
-# adt-bundle: v0.4.0
+# adt-bundle: v0.5.0
