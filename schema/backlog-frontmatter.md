@@ -32,7 +32,8 @@ mirrors it into a `stage:` field.
 | `parent` | yes, to plan (not on an Epic) | a ticket ID | AO-028: the Feature ticket this ticket belongs to; on a Feature, its Epic ticket. An Epic has none. The done-guard denies a move into `planned/` unless the chain reaches a Feature whose own `parent` is an Epic. The push mirrors it to a GitHub sub-issue link. Chosen by ID from `tools/management_report.py --list-groups <cache>`. |
 | `product_owner` | no | GitHub handle or a name | AO-028: who owns the work. Set on an Epic ticket; a Feature shows its Epic's owner unless it names its own. |
 | `sub_issue_refused` | no (written by the sync) | text | AO-028: GitHub refused the sub-issue link for this ticket's `parent`, with the reason. Local only. `management_report.py --check-assigned` names it. |
-| `epic`, `feature` | no (phase 1, read once) | free text | AO-028 phase 1 grouped by these names. `/adt-group` reads them to propose the Epic and Feature tickets, and removes them as it sets `parent`. Nothing else reads them. |
+| `epic` | no (phase 1, read once) | free text | AO-028 phase 1 grouped tickets by this name. `/adt-group` reads it to propose the Epic tickets, and removes it as it sets `parent`. Nothing else reads it. |
+| `feature` | no (phase 1, read once) | free text | The phase 1 feature name, read and removed by `/adt-group` the same way as `epic`. |
 | `devs` | no | comma-separated GitHub handles | AO-028: who wrote the linked commits, stamped at `/adt-close` by `tools/adt_devs.py`. An empty `devs:` means checked, with no commit resolving to a GitHub login. Never guessed from a git author name. |
 | `planned_start` | no | `YYYY-MM-DD` | AO-028: asked at `/adt-plan`; absent when no plan was given. Shown as Plan start. |
 | `planned_finish` | no | `YYYY-MM-DD` | AO-028: as `planned_start`. Shown as Plan finish; the finish slip is measured against it. |
