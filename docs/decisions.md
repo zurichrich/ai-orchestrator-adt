@@ -556,3 +556,58 @@ a consumer name once the audit script leaves. `/adt-close` and `/adt-decide`
 need no change.
 **Reversibility:** Medium — the prefix is one line in the per-user yaml, but
 tickets already stamped with it would have to be renamed.
+
+## ADR-038 — Epics and Features are tickets, not a registry
+
+**Date:** 2026-11-26
+**Decided by:** operator, with the user (zurichrich) approving the plan and the grouping
+**Triggered by:** delivery-overview-epic-feature (AO-028 phase 2)
+**Context:** Phase 1 grouped tickets by free-text `epic:`/`feature:` names. A typo made a new group, an Epic had nowhere to keep its owner or plan, and GitHub had no record of the grouping.
+**Decision:** An Epic and a Feature are ordinary tickets (`type: epic` / `type: feature`) with their own Issues and cache files. A child names its parent with `parent: <ID>`. There is no separate registry file.
+**Rationale:** Tickets already have everything a group needs: an Issue, an owner, plan dates, a lane, sync, and a card. A registry would need its own sync, its own conflict handling and its own place on the board. The sub-issue API gives GitHub a native view of the same tree.
+**Implications:** The sync orders pushes Epic, then Feature, then the rest, so a parent has its number before a child links to it. `epic:`/`feature:` are now read only by `/adt-group --propose`.
+**Reversibility:** Low — the tree is in every ticket's `parent:` and in GitHub's sub-issues, so going back means migrating both.
+
+## ADR-039 — An Epic's and a Feature's lane is derived from their children
+
+**Date:** 2026-11-26
+**Decided by:** operator, with the user (zurichrich) approving the plan and the grouping
+**Triggered by:** delivery-overview-epic-feature (AO-028 phase 2)
+**Context:** Epic and Feature cards could be moved by hand and drift from the work under them.
+**Decision:** The render sets each parent's lane: `done` when every child is done, `ideas` while every child is still in ideas, and `building` otherwise. A hand move is put back on the next render.
+**Rationale:** A parent has no work of its own to track through the lanes, so a stored lane could only be wrong. Deriving it in the render costs one pass and needs no new state.
+**Implications:** A parent's folder in the cache is written by the render, not by a person. Its own plan dates and cost are still its own.
+**Reversibility:** High — removing the derivation in `build_kanban.derive_parent_lanes` restores hand-moved lanes.
+
+## ADR-040 — Grouping takes a GitHub label as a lock across machines
+
+**Date:** 2026-11-26
+**Decided by:** operator, with the user (zurichrich) approving the plan and the grouping
+**Triggered by:** delivery-overview-epic-feature (AO-028 phase 2)
+**Context:** `/adt-group --apply` creates Issues. Two machines running it at once, or one run racing a watch tick, would create duplicate Epics and Features.
+**Decision:** The apply takes this machine's sync flock and then creates the `adt:grouping` label on the repo as a lock. A label create is atomic (422 when it already exists). A lock older than an hour is taken over.
+**Rationale:** The repo is the only state both machines share. A label needs no new service, and the one-hour takeover means a crashed run cannot block grouping for good.
+**Implications:** A second machine that finds the label is told to wait and start again from the proposal.
+**Reversibility:** High — the lock lives in `adt_hierarchy.take_lock`/`release_lock`.
+
+## ADR-041 — Updating projects are migrated by a command the PO approves, not by the installer
+
+**Date:** 2026-11-26
+**Decided by:** operator, with the user (zurichrich) approving the plan and the grouping
+**Triggered by:** delivery-overview-epic-feature (AO-028 phase 2)
+**Context:** Projects updating from 0.4.0 or earlier have tickets with no parent, and the new plan gate refuses them.
+**Decision:** The installer only reports how many tickets need grouping (`adt_hierarchy.py --status`). `/adt-group` proposes an outline, the product owner approves it, and only then are Issues created. Done tickets are included.
+**Rationale:** Creating Issues publishes to GitHub and the grouping is a product decision, so it needs a person's yes. An installer that created Issues would do both without asking.
+**Implications:** A project is not fully grouped until someone runs `/adt-group`. The board and report show unassigned tickets in their own bucket until then.
+**Reversibility:** Medium — the installer could call the apply, but it would then need a way to ask the PO.
+
+## ADR-042 — Phase 1's epic and feature names are read only by the proposal
+
+**Date:** 2026-11-26
+**Decided by:** operator, with the user (zurichrich) approving the plan and the grouping
+**Triggered by:** delivery-overview-epic-feature (AO-028 phase 2)
+**Context:** After phase 2, `epic:`/`feature:` still sat on old tickets and could disagree with `parent:`.
+**Decision:** Only `/adt-group --propose` reads them, to suggest a starting outline. The report, board and gate read `parent:` alone, and applying a grouping removes the two names from each ticket it links.
+**Rationale:** Two sources for the same tree would need rules for which one wins. Using the names only as a suggestion keeps them useful during migration and gives `parent:` sole authority afterwards.
+**Implications:** The schema still documents both fields, as read once by `/adt-group`.
+**Reversibility:** High — nothing else depends on the names.
