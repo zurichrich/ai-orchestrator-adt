@@ -116,19 +116,25 @@ TOKEN_LEDGER_REL_PREV = ".adt/state/token-usage.log"
 # REPO and every card shows "🪙 —". See the kanban-token-counts-dark fix.
 TOKEN_LEDGER_ROOT = ""
 
-TYPES = ["bugs", "enhancements", "tasks"]
+TYPES = ["bugs", "enhancements", "tasks", "epics", "features"]
 TYPE_LABEL = {
     "bugs": "Bugs",
     "enhancements": "Enhancements",
     "tasks": "Tasks",
+    "epics": "Epics",
+    "features": "Features",
 }
+# AO-028: an Epic's or Feature's card title says what it is.
+CARD_PREFIX = {"epics": "Epic: ", "features": "Feature: "}
 # Every type folder load_items reads, mapped to the type it falls back to.
 # AO-016: the playbooks said `cache/<type>/` while `type:` is singular, so agents
 # wrote tickets into `enhancement/` and the board skipped them silently. Nothing
 # moves a file between type folders, so the singular form is read as storage too.
 TYPE_FOLDERS = {
     "bugs": "bugs", "enhancements": "enhancements", "tasks": "tasks",
+    "epics": "epics", "features": "features",
     "bug": "bugs", "enhancement": "enhancements", "task": "tasks",
+    "epic": "epics", "feature": "features",
 }
 STATUSES = ["ideas", "planned", "building", "qa", "blocked",
             "ready-to-release", "done"]
@@ -670,7 +676,7 @@ def _type_from_fm(fm: dict, folder_type: str) -> str:
     raw = (fm.get("type") or "").strip().lower()
     if not raw:
         return folder_type
-    plural = raw + "s" if raw in ("bug", "enhancement", "task") else raw
+    plural = raw + "s" if raw in ("bug", "enhancement", "task", "epic", "feature") else raw
     return plural if plural in TYPES else folder_type
 
 
@@ -1327,6 +1333,42 @@ def assign_missing_ids(items: list[Item]) -> int:
         _write_id_into_frontmatter(it, new_id)
         derived += 1
     return derived
+
+
+def _pid(v) -> str:
+    """`AO-028` and `ao-28` name one ticket (adt_hierarchy.canon)."""
+    s = str(v or "").strip().strip("'\"").upper()
+    m = re.match(r"^([A-Z]+)-0*(\d+)$", s)
+    return f"{m.group(1)}-{m.group(2)}" if m else s
+
+
+def derive_parent_lanes(items: list["Item"]) -> int:
+    """AO-028: an Epic's or Feature's lane follows its children. Features first
+    (from their tickets), then Epics (from their Features): `done` when it has
+    children and all are done, `ideas` while no child has left ideas,
+    otherwise `building`. The file is moved, so the folder stays the truth and
+    sync_stage_frontmatter brings `stage:`/`state:` along. A hand move of an
+    Epic or Feature is undone here. Returns the count moved."""
+    moved = 0
+    for kind, child_kinds in (("features", None), ("epics", ("features",))):
+        for it in items:
+            if it.type != kind:
+                continue
+            kids = [c for c in items if c is not it
+                    and _pid(c.fm.get("parent")) == _pid(it.id)
+                    and (c.type in child_kinds if child_kinds
+                         else c.type not in ("epics", "features"))]
+            lanes = {c.status for c in kids}
+            lane = ("done" if kids and lanes == {"done"}
+                    else "ideas" if lanes <= {"ideas"} else "building")
+            if lane == it.status:
+                continue
+            dest = it.path.parent.parent / lane / it.path.name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            it.path.rename(dest)
+            it.path, it.status = dest, lane
+            moved += 1
+    return moved
 
 
 def sync_stage_frontmatter(items: list["Item"]) -> int:
@@ -2013,6 +2055,8 @@ def render_html(items: list[Item]) -> str:
         '<button data-filter="bugs">Bugs</button>',
         '<button data-filter="enhancements">Enhancements</button>',
         '<button data-filter="tasks">Tasks</button>',
+        '<button data-filter="epics">Epics</button>',
+        '<button data-filter="features">Features</button>',
         "</div>",
         '<div class="filter-group" data-dim="priority">',
         '<span class="label">Priority</span>',
@@ -2071,7 +2115,7 @@ def render_html(items: list[Item]) -> str:
         if not bucket:
             parts.append('<div class="empty">—</div>')
         for it in bucket:
-            title = html.escape(it.title)
+            title = html.escape(CARD_PREFIX.get(it.type, "") + it.title)
             hook = html.escape(it.hook)
             href = html.escape(f"#t-{it.slug}")
             pr = it.priority or ""
@@ -2244,6 +2288,7 @@ TICKET_CSS = """
 .pill.type-bug { background: var(--bug); color: var(--bug-strong); }
 .pill.type-enhancement { background: var(--enh); color: var(--enh-strong); }
 .pill.type-task { background: var(--tsk); color: var(--tsk-strong); }
+.pill.type-epic, .pill.type-feature { background: var(--code-bg); color: var(--text); }
 .pill.priority {
   color: white;
 }
@@ -2370,8 +2415,8 @@ def render_ticket_detail(it: Item) -> str:
     body_md = strip_frontmatter(it.text)
     body_html = md_to_html(body_md)
 
-    type_singular = {"bugs": "bug", "enhancements": "enhancement", "tasks": "task"}[it.type]
-    type_label = {"bug": "Bug", "enhancement": "Enhancement", "task": "Task"}[type_singular]
+    type_singular = it.type[:-1]
+    type_label = type_singular.capitalize()
 
     pills: list[str] = [
         f'<span class="pill type-{type_singular}">{type_label}</span>',
@@ -2625,6 +2670,7 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
     new = assign_missing_ids(items)
     if new:
         print(f"Assigned {new} new {ID_PREFIX}-N ids")
+    derive_parent_lanes(items)
     staged = sync_stage_frontmatter(items)
     if staged:
         print(f"Synced stage: frontmatter on {staged} briefs (folder=truth; state: kept in lockstep)")
@@ -2635,7 +2681,7 @@ def run(project_root=None, *, backlog_root=".adt/backlog",
     try:
         import management_report
         (BL / "management-report.html").write_text(
-            management_report.render(items, REPO_NAME or REPO.name))
+            management_report.render(items, REPO_NAME or REPO.name, issues_url=ISSUES_URL))
     except Exception as e:  # noqa: BLE001 - the board must still render
         print(f"management report skipped: {e}", file=sys.stderr)
 

@@ -19,13 +19,28 @@ import management_report  # noqa: E402
 TODAY = "2026-11-24"
 
 
-def _ticket(cache: Path, slug: str, stage: str = "done", **fm) -> None:
-    d = cache / "enhancements" / stage
+def _ticket(cache: Path, slug: str, stage: str = "done", folder: str = "enhancements",
+            **fm) -> None:
+    d = cache / folder / stage
     d.mkdir(parents=True, exist_ok=True)
     fields = {"slug": slug, "id": slug.upper(), "type": "enhancement",
               "stage": stage, "created": "2026-11-01", **fm}
     head = "\n".join(f"{k}: {v}" for k, v in fields.items())
-    (d / f"{slug}.md").write_text(f"---\n{head}\n---\n\n# Title of {slug}\n")
+    (d / f"{slug}.md").write_text(f"---\n{head}\n---\n\n# {fm.get('title', 'Title of ' + slug)}\n")
+
+
+def _epic(cache: Path, slug: str, title: str, **fm) -> None:
+    _ticket(cache, slug, "ideas", "epics", type="epic", title=title, **fm)
+
+
+def _feature(cache: Path, slug: str, title: str, parent: str, **fm) -> None:
+    _ticket(cache, slug, "ideas", "features", type="feature", title=title, parent=parent, **fm)
+
+
+def _grouped(cache: Path, owner="amy") -> None:
+    """Epic E1 (owner amy) > Feature F1, the parent most tests hang tickets on."""
+    _epic(cache, "e1", "E", product_owner=owner)
+    _feature(cache, "f1", "F", "E1")
 
 
 def _render(cache: Path) -> str:
@@ -52,8 +67,9 @@ def _row(id_, cost=None, tier="measured", start="2026-11-01", finish=None,
 
 
 def test_every_ticket_is_embedded(tmp_path):
+    _grouped(tmp_path)
     for s in ("a", "b", "c"):
-        _ticket(tmp_path, s, epic="Billing", feature="Invoices")
+        _ticket(tmp_path, s, parent="F1")
     _ticket(tmp_path, "d", stage="ideas", cost_usd="2.5", cost_tier="measured")
     rows = {t[0]: t for t in _data(_render(tmp_path))["tickets"]}
     assert sorted(rows) == ["A", "B", "C", "D"]
@@ -63,8 +79,10 @@ def test_every_ticket_is_embedded(tmp_path):
 
 def test_report_contains_only_its_own_project(tmp_path):
     one, two = tmp_path / "one", tmp_path / "two"
-    _ticket(one, "alpha-only", epic="E", feature="F")
-    _ticket(two, "beta-only", epic="E", feature="F")
+    _grouped(one)
+    _grouped(two)
+    _ticket(one, "alpha-only", parent="F1")
+    _ticket(two, "beta-only", parent="F1")
     a, b = _render(one), _render(two)
     assert "ALPHA-ONLY" in a and "BETA-ONLY" not in a
     assert "BETA-ONLY" in b and "ALPHA-ONLY" not in b
@@ -86,7 +104,8 @@ def test_non_measured_cost_is_marked(tmp_path):
 
 
 def _seed_one(cache: Path) -> Path:
-    _ticket(cache, "one", epic="E", feature="F")
+    _grouped(cache)
+    _ticket(cache, "one", parent="F1")
     return cache
 
 
@@ -107,10 +126,12 @@ def test_slip_and_cost_variance():
 
 
 def test_feature_inherits_epic_owner(tmp_path):
-    _ticket(tmp_path, "a", epic="E", feature="One", product_owner="alice")
-    _ticket(tmp_path, "b", epic="E", feature="One", product_owner="alice")
-    _ticket(tmp_path, "c", epic="E", feature="Two")
-    _ticket(tmp_path, "d", epic="E", feature="Three", product_owner="bob")
+    _epic(tmp_path, "e1", "E", product_owner="alice")
+    _feature(tmp_path, "f1", "One", "E1")
+    _feature(tmp_path, "f2", "Two", "E1", product_owner="alice")
+    _feature(tmp_path, "f3", "Three", "E1", product_owner="bob")
+    for s, f in (("a", "F1"), ("b", "F2"), ("c", "F3")):
+        _ticket(tmp_path, s, parent=f)
     d = _data(_render(tmp_path))
     e = d["epics"].index("E")
     assert d["epicPO"][e] == "alice"
@@ -121,26 +142,33 @@ def test_feature_inherits_epic_owner(tmp_path):
     assert 'inh: P.featPO[ctx.e][ctx.f][1]' in _render(tmp_path)
 
 
-def test_owner_tie_goes_to_earliest_ticket():
-    rows = [_row("late", start="2026-11-09", owner="zed"),
-            _row("early", start="2026-11-02", owner="amy")]
-    assert management_report._owner(rows) == "amy"
-    assert management_report._owner(list(reversed(rows))) == "amy"
+def test_epic_owner_is_the_epic_tickets(tmp_path):
+    _epic(tmp_path, "e1", "E", product_owner="erin")
+    _feature(tmp_path, "f1", "F", "E1")
+    _ticket(tmp_path, "a", parent="F1", product_owner="zed")
+    _ticket(tmp_path, "b", parent="F1", product_owner="zed")
+    d = _data(_render(tmp_path))
+    assert d["epicPO"][d["epics"].index("E")] == "erin"
 
 
-def test_feature_is_keyed_by_epic_and_name(tmp_path):
-    _ticket(tmp_path, "a", epic="Billing", feature="Search")
-    _ticket(tmp_path, "b", epic="Catalogue", feature="Search")
+def test_feature_is_found_by_parent_id(tmp_path):
+    _epic(tmp_path, "e1", "Billing", product_owner="amy")
+    _epic(tmp_path, "e2", "Catalogue", product_owner="amy")
+    _feature(tmp_path, "f1", "Search", "E1")
+    _feature(tmp_path, "f2", "Search", "E2", id="F-2")
+    _ticket(tmp_path, "a", parent="F1")
+    _ticket(tmp_path, "b", parent="f-02")
     d = _data(_render(tmp_path))
     assert d["features"][d["epics"].index("Billing")] == ["Search"]
     assert d["features"][d["epics"].index("Catalogue")] == ["Search"]
-    rows = {t[0]: (t[2], t[3]) for t in d["tickets"]}
-    assert rows["A"][0] != rows["B"][0]
+    rows = {t[0]: t[2] for t in d["tickets"]}
+    assert d["epics"][rows["A"]] == "Billing" and d["epics"][rows["B"]] == "Catalogue"
 
 
 def test_no_plan_means_no_plan_values(tmp_path):
-    _ticket(tmp_path, "a", epic="E", feature="F")
-    _ticket(tmp_path, "b", epic="E", feature="F", planned_start="2026-11-02",
+    _grouped(tmp_path)
+    _ticket(tmp_path, "a", parent="F1")
+    _ticket(tmp_path, "b", parent="F1", planned_start="2026-11-02",
             planned_finish="2026-11-09", planned_cost=12.5)
     d = _data(_render(tmp_path))
     t = {r[0]: r for r in d["tickets"]}
@@ -151,16 +179,23 @@ def test_no_plan_means_no_plan_values(tmp_path):
 
 
 def test_unassigned_tickets_get_their_own_lane(tmp_path):
-    _ticket(tmp_path, "a", epic="E", feature="F")
+    _grouped(tmp_path)
+    _feature(tmp_path, "f9", "Orphan", "E99")
+    _ticket(tmp_path, "a", parent="F1")
     _ticket(tmp_path, "b")
+    _ticket(tmp_path, "c", parent="A")       # a plain ticket is not a Feature
+    _ticket(tmp_path, "d", parent="F9")      # a Feature with no Epic
     d = _data(_render(tmp_path))
     assert d["epics"][-1] == "Unassigned"
     assert d["features"][-1] == ["Unassigned"]
-    assert d["unassigned"] == 1
+    assert d["unassigned"] == 3
+    assert "Orphan" not in sum(d["features"], [])
 
 
 def test_embedded_data_cannot_close_the_script(tmp_path):
-    _ticket(tmp_path, "x", epic="</script><script>alert(1)</script>", feature="<!--")
+    _epic(tmp_path, "e1", "</script><script>alert(1)</script>", product_owner="a")
+    _feature(tmp_path, "f1", "<!--", "E1")
+    _ticket(tmp_path, "x", parent="F1")
     html = _render(tmp_path)
     script = html.split("<script>", 1)[1]
     assert script.count("</script>") == 1
@@ -209,24 +244,88 @@ def test_board_still_renders_when_the_report_fails(tmp_path, monkeypatch, capsys
 
 
 def test_check_assigned_fails_on_an_ungrouped_ticket(tmp_path, capsys):
-    _ticket(tmp_path, "a", epic="E", feature="F", product_owner="amy")
+    _grouped(tmp_path)
+    _ticket(tmp_path, "a", parent="F1")
     assert management_report.main(["--check-assigned", str(tmp_path)]) == 0
-    _ticket(tmp_path, "b", epic="E")
+    _ticket(tmp_path, "b", stage="done")        # a done ticket counts too
     assert management_report.main(["--check-assigned", str(tmp_path)]) == 1
-    assert "B: no epic or feature" in capsys.readouterr().out
+    assert "B: not in a Feature and an Epic" in capsys.readouterr().out
 
 
 def test_check_assigned_fails_on_an_epic_with_no_owner(tmp_path, capsys):
-    _ticket(tmp_path, "a", epic="E", feature="F")
+    _epic(tmp_path, "e1", "E")
+    _feature(tmp_path, "f1", "F", "E1")
+    _ticket(tmp_path, "a", parent="F1")
     assert management_report.main(["--check-assigned", str(tmp_path)]) == 1
     assert "epic 'E': no product owner" in capsys.readouterr().out
 
 
 def test_list_groups_prints_epics_features_and_owners(tmp_path, capsys):
-    _ticket(tmp_path, "a", epic="Billing", feature="Invoices", product_owner="amy")
-    _ticket(tmp_path, "b", epic="Billing", feature="Refunds", product_owner="bo")
+    _epic(tmp_path, "e1", "Billing", product_owner="amy", issue_number=40, id="T-40")
+    _feature(tmp_path, "f1", "Invoices", "T-40", issue_number=41, id="T-41")
+    _feature(tmp_path, "f2", "Refunds", "T-40", product_owner="bo", issue_number=42, id="T-42")
     assert management_report.main(["--list-groups", str(tmp_path)]) == 0
     out = capsys.readouterr().out
-    assert "Billing  (owner: amy)" in out
-    assert "  Invoices  (owner: amy, inherited)" in out
-    assert "  Refunds  (owner: bo)" in out
+    assert "T-40 Billing  (owner: amy)" in out
+    assert "  T-41 Invoices  (owner: amy, inherited)" in out
+    assert "  T-42 Refunds  (owner: bo)" in out
+
+
+def test_groups_come_from_parent_tickets(tmp_path):
+    _epic(tmp_path, "e1", "Renamed epic", product_owner="amy")
+    _feature(tmp_path, "f1", "Renamed feature", "E1")
+    _ticket(tmp_path, "a", parent="F1", epic="Old name", feature="Old feature")
+    d = _data(_render(tmp_path))
+    assert d["epics"] == ["Renamed epic"] and d["features"] == [["Renamed feature"]]
+    assert d["tickets"][0][2:4] == [0, 0]
+
+
+def test_epic_and_feature_tickets_are_not_counted_as_tickets(tmp_path):
+    _grouped(tmp_path)
+    _ticket(tmp_path, "a", parent="F1", cost_usd="1.5", cost_tier="measured")
+    d = _data(_render(tmp_path))
+    assert [t[0] for t in d["tickets"]] == ["A"]
+    assert d["rollups"]["all"]["n"] == 1 and d["rollups"]["e0"]["n"] == 1
+    assert d["rollups"]["e0-f0"]["ac"]["sum"] == 1.5
+
+
+def test_own_plan_is_compared_with_children(tmp_path):
+    _epic(tmp_path, "e1", "E", product_owner="amy", planned_finish="2026-11-20",
+          planned_cost="10")
+    _feature(tmp_path, "f1", "F", "E1")
+    _ticket(tmp_path, "a", parent="F1", closed="2026-11-22", planned_finish="2026-11-25",
+            planned_cost="4", cost_usd="6", cost_tier="measured")
+    d = _data(_render(tmp_path))
+    e, f = d["rollups"]["e0"], d["rollups"]["e0-f0"]
+    assert e["pf"] == "2026-11-20" and e["pc"] == 10.0
+    assert e["kids"]["pf"] == "2026-11-25" and e["kids"]["pc"] == 4.0
+    assert e["slip"] == 2                       # finished 22nd against its own 20th
+    assert e["cv"] == -4.0 and e["cvN"] == 1    # 6 spent against its own 10
+    assert "kids" not in f and f["slip"] == -3  # the Feature has no plan of its own
+
+
+def test_epic_and_feature_rows_link_to_their_issues(tmp_path):
+    # The render derives an id from issue_number, so the parents are T-40, T-41.
+    _epic(tmp_path, "e1", "E", product_owner="amy", issue_number=40)
+    _feature(tmp_path, "f1", "F", "T-40", issue_number=41)
+    _ticket(tmp_path, "a", parent="T-41")
+    _ticket(tmp_path, "b")
+    build_kanban.run(str(tmp_path), backlog_root="", id_prefix="T", quiet=True,
+                     issues_url="https://example.test/o/r/issues")
+    d = _data((tmp_path / "management-report.html").read_text())
+    assert d["epicIssues"] == [40, None] and d["featIssues"] == [[41], [None]]
+    assert d["issuesUrl"] == "https://example.test/o/r/issues"
+
+
+def test_check_assigned_names_a_refused_link(tmp_path, capsys):
+    _grouped(tmp_path)
+    _ticket(tmp_path, "a", parent="F1", sub_issue_refused="422 limit reached")
+    assert management_report.main(["--check-assigned", str(tmp_path)]) == 1
+    assert "A: GitHub refused its sub-issue link (422 limit reached)" in capsys.readouterr().out
+
+
+def test_page_shows_children_plan_and_issue_links(tmp_path):
+    html = _render(_seed_one(tmp_path))
+    assert '<small class="kids">children: ' in html
+    assert "P.epicIssues[e]" in html and "P.featIssues[e]" in html
+    assert '<a class="name" href=' in html
