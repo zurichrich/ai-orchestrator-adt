@@ -116,9 +116,11 @@ h1{font-family:var(--f-display);font-stretch:78%;font-weight:750;font-size:clamp
 .c-name{display:grid;grid-template-columns:22px auto minmax(0,1fr);gap:2px 8px;align-items:center;min-width:0;margin-left:-8px}
 .c-name .chip{width:10px;height:10px;border-radius:3px;background:var(--c);grid-row:1}
 .c-name .name{font-weight:600;font-size:14px;line-height:1.25;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-a.name{color:inherit;text-decoration:none}
+a.name{color:inherit;text-decoration:underline dotted var(--faint);text-underline-offset:3px}
 a.name:hover,a.name:focus-visible{text-decoration:underline}
-.cell small.kids{display:block;font-family:var(--f-body);font-size:10.5px;color:var(--faint)}
+a.name:focus-visible{outline-offset:-2px}
+.cell small.kids{display:block;font-family:var(--f-body);font-size:10.5px;color:var(--faint);white-space:normal;line-height:1.25}
+.cell small.kids span{white-space:nowrap}
 .c-name .meta{grid-column:2/4;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px}
 .cell{min-width:0;font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .c-cost{text-align:right;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
@@ -416,7 +418,7 @@ function kidsNote(a, k, fmt){
   const own = a[k], kid = a.kids[k];
   const has = k === "pc" ? a.kids.nPlan > 0 : kid != null;
   if (!has || +own === +kid) return "";
-  return `<small class="kids">children: ${fmt(kid)}</small>`;
+  return `<small class="kids">children: <span>${fmt(kid)}</span></small>`;
 }
 // The Issue an Epic or Feature row stands for, when the renderer knew the repo.
 const issueOf = (e, f) => {
@@ -532,7 +534,7 @@ function render(keepScroll){
   items.push([sa.ac.n ? (sa.ac.approx?"~":"")+money(sa.ac.sum) : "—", `Actual cost · ${sa.ac.n} of ${sa.ac.of} costed`]);
   if (planShown()) {
     items.push([sa.nPlan ? money(sa.pc) : "—", `Plan cost · ${sa.nPlan} planned`]);
-    items.push([sa.cvN ? signedMoney(sa.cv) : "—", `Cost variance · ${sa.cvN} tickets`]);
+    items.push([sa.cvN ? signedMoney(sa.cv) : "—", `Cost variance · ${sa.cvN} ticket${sa.cvN===1?"":"s"}`]);
   }
   const owner = S.e==null ? null : S.f!=null ? P.featPO[S.e][S.f][0] : P.epicPO[S.e];
   if (owner) items.push([`<span style="font-size:15px">${who(owner)}</span>`, "Product owner"]);
@@ -655,9 +657,11 @@ window.addEventListener("hashchange", fromHash);
 function openKey(key){ if (key[0]==="e") go(+key.slice(1), null); else go(S.e, +key.slice(1)); }
 const up = () => { if (S.f!=null) { S.back = "f"+S.f; go(S.e,null); } else if (S.e!=null) { S.back = "e"+S.e; go(null,null); } };
 const gantt = $("gantt");
-gantt.addEventListener("dblclick", ev => { const r = ev.target.closest(".row.group"); if (r) { window.getSelection()?.removeAllRanges(); openKey(r.dataset.open); } });
+// A name links to its Issue: the link keeps its own click and Enter, so the
+// row does not also drill in.
+gantt.addEventListener("dblclick", ev => { if (ev.target.closest("a")) return; const r = ev.target.closest(".row.group"); if (r) { window.getSelection()?.removeAllRanges(); openKey(r.dataset.open); } });
 gantt.addEventListener("click", ev => { const b = ev.target.closest(".open-btn"); if (b) openKey(b.dataset.open); if (ev.target.closest(".up-btn")) up(); });
-gantt.addEventListener("keydown", ev => { if (ev.key==="Enter") { const r = ev.target.closest(".row.group"); if (r) openKey(r.dataset.open); } });
+gantt.addEventListener("keydown", ev => { if (ev.key==="Enter" && !ev.target.closest("a")) { const r = ev.target.closest(".row.group"); if (r) openKey(r.dataset.open); } });
 $("crumbs").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; if (b.dataset.go==="root") go(null,null); else go(S.e,null); });
 $("zoomCtl").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; S.zoom=b.dataset.z; save("adt-report-zoom",S.zoom); render(); });
 $("dfCtl").addEventListener("click", ev => { const b = ev.target.closest("button"); if (!b) return; S.df=b.dataset.df; save("adt-report-df",S.df); render(true); });
